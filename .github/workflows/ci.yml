@@ -28,22 +28,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Host suite (-Werror)
+        shell: bash
         run: |
           cmake -B build-host -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_C_FLAGS="-Wall -Wextra -Werror"
           cmake --build build-host --parallel
-          ctest --test-dir build-host --output-on-failure
+          ctest --test-dir build-host --output-on-failure \
+                --output-junit junit.xml | tee host-tests.log
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-test-results
+          path: |
+            host-tests.log
+            build-host/junit.xml
 
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Host suite under ASan+UBSan
+        shell: bash
         run: |
           cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all"
           cmake --build build-asan --parallel
-          ctest --test-dir build-asan --output-on-failure
+          ctest --test-dir build-asan --output-on-failure | tee sanitizer-tests.log
+      - name: Upload sanitizer log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-results
+          path: sanitizer-tests.log
 
   coverage:
     runs-on: ubuntu-24.04
@@ -57,8 +74,20 @@ jobs:
                 -DCMAKE_C_FLAGS="--coverage" -DCMAKE_EXE_LINKER_FLAGS="--coverage"
           cmake --build build-cov --parallel
           ctest --test-dir build-cov --output-on-failure
+          # Browsable per-function/per-line report first (never gates),
+          # then the text gate. Open coverage-html/coverage.html from
+          # the artifact; coverage.functions.html lists every function.
+          mkdir -p coverage-html
+          uvx gcovr --root . --filter 'kernel/' \
+                    --html-details coverage-html/coverage.html build-cov
           uvx gcovr --root . --filter 'kernel/' --fail-under-line 95 \
                     build-cov | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage-html/
 
   static-analysis:
     runs-on: ubuntu-24.04
@@ -101,8 +130,11 @@ jobs:
           { echo '### MSP430 build'; echo '```'
             sed -n '/=== summary ===/,$p' ci-run.log; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload firmware image
+      - name: Upload firmware image and build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mrtos_fr5994.elf
-          path: build-msp430/mrtos_fr5994.elf
+          name: msp430-build
+          path: |
+            build-msp430/mrtos_fr5994.elf
+            ci-run.log
