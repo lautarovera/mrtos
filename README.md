@@ -1,5 +1,7 @@
 # mRTOS — minimal preemptive RTOS for MSP430FR59xx
 
+[![CI](https://github.com/lautarovera-lab/mrtos/actions/workflows/ci.yml/badge.svg)](https://github.com/lautarovera-lab/mrtos/actions/workflows/ci.yml)
+
 A from-scratch real-time kernel designed for the MSP430FR59xx family
 (CPUX core, FRAM), with a concrete implementation for the **MSP430FR5994**
 and a POSIX host port that runs the unmodified kernel under a unit-test
