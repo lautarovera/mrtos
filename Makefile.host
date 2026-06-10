@@ -1,0 +1,11 @@
+CC=gcc
+CFLAGS=-O1 -g -Wall -Wextra -Ikernel -Iport/posix -Itest
+
+test_kernel: kernel/mrtos.c port/posix/port.c test/test_kernel.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+run: test_kernel
+	./test_kernel
+
+clean:
+	rm -f test_kernel

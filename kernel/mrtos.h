@@ -1,0 +1,169 @@
+/*
+ * mRTOS - minimal preemptive RTOS for MSP430FR59xx (portable core)
+ *
+ * Kernel public API. The kernel is port-agnostic: everything CPU/board
+ * specific lives behind the port contract declared at the bottom of this
+ * file and implemented in port/<arch>/port.{h,c}.
+ *
+ * Author: generated design for lautarovera, 2026. MIT license.
+ */
+#ifndef MRTOS_H
+#define MRTOS_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include "mrtos_config.h"
+#include "port.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ------------------------------------------------------------------ */
+/* Configuration defaults (override in mrtos_config.h)                 */
+/* ------------------------------------------------------------------ */
+#ifndef MRTOS_CFG_TICK_HZ
+#define MRTOS_CFG_TICK_HZ          1000u
+#endif
+#ifndef MRTOS_CFG_SLICE_TICKS
+#define MRTOS_CFG_SLICE_TICKS      10u     /* round-robin quantum        */
+#endif
+#ifndef MRTOS_CFG_IDLE_STACK_WORDS
+#define MRTOS_CFG_IDLE_STACK_WORDS 64u
+#endif
+#ifndef MRTOS_CFG_STACK_CHECK
+#define MRTOS_CFG_STACK_CHECK      1
+#endif
+
+#define MRTOS_PRIO_LEVELS   8u             /* 0 = idle (lowest) .. 7     */
+#define MRTOS_PRIO_MAX      (MRTOS_PRIO_LEVELS - 1u)
+
+#define MRTOS_FOREVER       0xFFFFu        /* timeout sentinel            */
+
+/* Return codes */
+#define MRTOS_OK            0
+#define MRTOS_ERR_TIMEOUT   (-1)
+#define MRTOS_ERR_OWNER     (-2)           /* mutex misuse                */
+
+#define MRTOS_MS(ms)  ((uint16_t)(((uint32_t)(ms) * MRTOS_CFG_TICK_HZ) / 1000u))
+
+typedef enum {
+    MRTOS_TASK_READY     = 0,              /* in a ready list (or running)*/
+    MRTOS_TASK_BLOCKED   = 1,              /* waiting on object/delay     */
+    MRTOS_TASK_SUSPENDED = 2               /* exited; never scheduled     */
+} mrtos_state_t;
+
+/* ------------------------------------------------------------------ */
+/* Task control block. sp MUST be the first member: the MSP430 port    */
+/* context-switch assembly stores/loads SP at offset 0 of the TCB.     */
+/* ------------------------------------------------------------------ */
+typedef struct mrtos_tcb {
+    port_stack_t      *sp;                 /* saved stack pointer  (+0)   */
+    struct mrtos_tcb  *next;               /* ready/wait list (circular)  */
+    struct mrtos_tcb  *prev;
+    struct mrtos_tcb **wait_head;          /* wait list head we sit in    */
+    struct mrtos_tcb  *dnext;              /* delta delay list            */
+    uint16_t           delta;              /* ticks relative to dprev     */
+    uint8_t            in_delay;
+    uint8_t            prio;               /* effective (may be inherited)*/
+    uint8_t            base_prio;          /* assigned at creation        */
+    uint8_t            state;
+    int8_t             wake_res;           /* result seen by unblocked task*/
+    void             (*entry)(void *);
+    void              *arg;
+    port_stack_t      *stack_base;
+    size_t             stack_words;
+    const char        *name;
+#ifdef PORT_TCB_EXT
+    PORT_TCB_EXT                           /* port-private extension      */
+#endif
+} mrtos_tcb_t;
+
+/* Currently running task. Read-only outside the kernel/port.           */
+extern mrtos_tcb_t * volatile mrtos_cur;
+
+/* ------------------------------------------------------------------ */
+/* Core API                                                             */
+/* ------------------------------------------------------------------ */
+void     mrtos_init(void);
+void     mrtos_task_create(mrtos_tcb_t *tcb, const char *name,
+                           void (*entry)(void *), void *arg, uint8_t prio,
+                           port_stack_t *stack, size_t stack_words);
+void     mrtos_start(void);                /* does not return             */
+void     mrtos_yield(void);
+void     mrtos_sleep(uint16_t ticks);      /* ticks > 0                   */
+uint32_t mrtos_now(void);                  /* tick count since start      */
+
+/* ------------------------------------------------------------------ */
+/* Counting semaphore. give() is ISR-safe. take(timeout=0) polls.       */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    int16_t       count;
+    int16_t       limit;
+    mrtos_tcb_t  *waiters;                 /* prio-ordered, FIFO in prio  */
+} mrtos_sem_t;
+
+void mrtos_sem_init(mrtos_sem_t *s, int16_t initial, int16_t limit);
+int  mrtos_sem_take(mrtos_sem_t *s, uint16_t timeout);
+int  mrtos_sem_give(mrtos_sem_t *s);
+
+/* ------------------------------------------------------------------ */
+/* Mutex with single-level priority inheritance. Not recursive.         */
+/* Must not be used from ISRs.                                          */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    mrtos_tcb_t  *owner;
+    mrtos_tcb_t  *waiters;
+} mrtos_mutex_t;
+
+void mrtos_mutex_init(mrtos_mutex_t *m);
+int  mrtos_mutex_lock(mrtos_mutex_t *m, uint16_t timeout);
+int  mrtos_mutex_unlock(mrtos_mutex_t *m);
+
+/* ------------------------------------------------------------------ */
+/* Message queue: fixed-size items, copy semantics (Mesa-style wakeups).*/
+/* send/recv with timeout=0 are ISR-safe (non-blocking).                */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    uint8_t      *buf;
+    uint16_t      item_size;
+    uint16_t      length;
+    uint16_t      count;
+    uint16_t      head;                    /* next write slot             */
+    uint16_t      tail;                    /* next read slot              */
+    mrtos_tcb_t  *tx_waiters;
+    mrtos_tcb_t  *rx_waiters;
+} mrtos_queue_t;
+
+void mrtos_queue_init(mrtos_queue_t *q, void *storage,
+                      uint16_t item_size, uint16_t length);
+int  mrtos_queue_send(mrtos_queue_t *q, const void *item, uint16_t timeout);
+int  mrtos_queue_recv(mrtos_queue_t *q, void *item, uint16_t timeout);
+
+/* Weak hook: called with interrupts disabled on guard corruption.      */
+void mrtos_stack_overflow_hook(mrtos_tcb_t *t);
+
+/* ------------------------------------------------------------------ */
+/* Kernel entry points used by the PORT (not by application code)       */
+/* ------------------------------------------------------------------ */
+void mrtos_tick(void);                     /* tick ISR body               */
+void mrtos_sched_pick(void);               /* select highest-prio ready   */
+
+/* ------------------------------------------------------------------ */
+/* PORT CONTRACT - every port must provide (in port.h / port.c):        */
+/*                                                                      */
+/*   typedef ... port_stack_t;                                          */
+/*   uint16_t      port_irq_save(void);                                 */
+/*   void          port_irq_restore(uint16_t key);                      */
+/*   void          port_yield(void);     deferred or immediate switch   */
+/*   port_stack_t *port_stack_init(port_stack_t *base, size_t words,    */
+/*                                 void (*shell)(void *), void *arg);   */
+/*   void          port_start(void);     tick setup + first task, noret */
+/*   void          port_idle(void);      idle-loop body (e.g. LPM0)     */
+/*   optional: #define PORT_TCB_EXT  <extra TCB fields>                 */
+/* ------------------------------------------------------------------ */
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* MRTOS_H */
