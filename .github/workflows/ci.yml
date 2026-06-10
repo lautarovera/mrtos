@@ -74,14 +74,17 @@ jobs:
                 -DCMAKE_C_FLAGS="--coverage" -DCMAKE_EXE_LINKER_FLAGS="--coverage"
           cmake --build build-cov --parallel
           ctest --test-dir build-cov --output-on-failure
-          # Browsable per-function/per-line report first (never gates),
-          # then the text gate. Open coverage-html/coverage.html from
-          # the artifact; coverage.functions.html lists every function.
+          # One gcovr pass, three outputs: browsable HTML artifact
+          # (coverage.html annotated source, coverage.functions.html
+          # per-function table), a markdown table for the job summary,
+          # and the 95% line gate.
           mkdir -p coverage-html
           uvx gcovr --root . --filter 'kernel/' \
-                    --html-details coverage-html/coverage.html build-cov
-          uvx gcovr --root . --filter 'kernel/' --fail-under-line 95 \
-                    build-cov | tee -a "$GITHUB_STEP_SUMMARY"
+                    --html-details coverage-html/coverage.html \
+                    --markdown coverage.md \
+                    --fail-under-line 95 build-cov \
+            || { cat coverage.md >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+          cat coverage.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
