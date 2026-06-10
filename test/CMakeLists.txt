@@ -1,11 +1,15 @@
-# Host test suite (POSIX port only).
+# Test suite: runs on the POSIX port (native) and on the GNU MSP430
+# simulator (CTest invokes msp430-elf-run via CROSSCOMPILING_EMULATOR).
 set(MRTOS_TESTS
     test_unit_task
     test_unit_sem
     test_unit_mutex
     test_unit_queue
-    test_integration
-    test_kernel)          # original smoke test, kept as-is
+    test_integration)
+if(MRTOS_PORT STREQUAL "posix")
+    # Original smoke test: hardcodes ucontext-sized stacks, host-only.
+    list(APPEND MRTOS_TESTS test_kernel)
+endif()
 
 foreach(t IN LISTS MRTOS_TESTS)
     add_executable(${t} ${t}.c)

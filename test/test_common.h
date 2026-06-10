@@ -19,7 +19,12 @@
 #include <string.h>
 #include "mrtos.h"
 
+/* POSIX/ucontext needs huge stacks; real-ISA ports override this. */
+#ifdef PORT_TEST_STACK_WORDS
+#define TEST_STK_WORDS PORT_TEST_STACK_WORDS
+#else
 #define TEST_STK_WORDS 8192u  /* 64 KiB per ucontext stack */
+#endif
 
 static char test_evbuf[1024];
 static int  test_evn;
