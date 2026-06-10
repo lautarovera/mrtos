@@ -19,6 +19,13 @@ mrtos/
 └── Makefile.host           host test build (gcc)
 ```
 
+> **Full documentation:** the reference/user manual lives in
+> [doc/manual/](doc/manual/README.md) — architecture, API, port
+> contract, hardware constraints, build integration, and the complete
+> verification story. The executable test plan is
+> [doc/VALIDATION.md](doc/VALIDATION.md). This README is the short
+> version.
+
 ## Design
 
 ### Scheduling model
@@ -158,8 +165,66 @@ What is **not** verified here, stated plainly:
 
 ## Building
 
+### CMake (recommended — middleware-style integration)
+
+mRTOS builds as a static library you drop into a parent project:
+
+```cmake
+set(MRTOS_CONFIG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/config)  # your mrtos_config.h
+add_subdirectory(third_party/mrtos)
+target_link_libraries(app PRIVATE mrtos::mrtos)
+```
+
+The port is picked automatically (POSIX for native builds, msp430fr59xx
+when cross-compiling); override with `-DMRTOS_PORT=<name>`.
+
+Standalone host tests:
+
+```sh
+cmake -B build-host && cmake --build build-host
+ctest --test-dir build-host
+```
+
+Standalone target build (TI msp430-gcc, see `doc/VALIDATION.md` for
+toolchain download):
+
+```sh
+cmake -B build-msp430 --toolchain cmake/msp430fr5994.cmake \
+      -DMSP430_GCC_DIR=/path/to/msp430-gcc -DCMAKE_BUILD_TYPE=Release
+cmake --build build-msp430        # -Os; prints section sizes
+```
+
+The same suite also runs on the **real MSP430 ISA** without hardware,
+via the GNU simulator bundled with msp430-gcc (`msp430-elf-run`) and the
+`port/msp430sim` port (real CPUX `PUSHM.A`/`POPM.A` context switch):
+
+```sh
+cmake -B build-sim --toolchain cmake/msp430sim.cmake \
+      -DMSP430_GCC_DIR=/path/to/msp430-gcc
+cmake --build build-sim && ctest --test-dir build-sim
+```
+
+One-shot validation runner (host suite + optional simulator suite and
+target build):
+
+```sh
+uv run tools/run_tests.py [--sim] [--target] [--clean]
+```
+
+### Plain Makefiles (kept for non-CMake consumers)
+
 Host tests: `make -f Makefile.host run`
 
 Target: install TI's msp430-gcc + support files, then
 `make GCC_DIR=/path/to/msp430-gcc`. Flash `mrtos_fr5994.elf` with
 MSP-FET/mspdebug (`tilib`, eZ-FET on the LaunchPad).
+
+## Test suite
+
+`test/` holds six host-run binaries: unit tests per primitive
+(`test_unit_task`, `test_unit_sem`, `test_unit_mutex`,
+`test_unit_queue`), an integration suite (`test_integration`:
+producer/consumer stress, same-tick timeout-vs-give race, Mesa wakeup
+stealing, priority-inversion bounding) and the original smoke test.
+The full validation plan, including the manual on-target checklist for
+the LaunchPad, is in `doc/VALIDATION.md`.

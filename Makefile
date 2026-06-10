@@ -9,10 +9,12 @@ SUPPORT_DIR ?= $(GCC_DIR)/include
 CC      = $(GCC_DIR)/bin/msp430-elf-gcc
 MCU     = msp430fr5994
 
-CFLAGS  = -mmcu=$(MCU) -mhwmult=f5series -O2 -g -Wall -Wextra \
+CFLAGS  = -mmcu=$(MCU) -mhwmult=f5series -Os -g -Wall -Wextra \
           -ffunction-sections -fdata-sections \
           -I$(SUPPORT_DIR) -Ikernel -Iport/msp430fr59xx -Iapp
-LDFLAGS = -mmcu=$(MCU) -L$(SUPPORT_DIR) -Wl,--gc-sections
+# -mmcu only once on the combined compile+link line, or the device
+# linker script is included twice.
+LDFLAGS = -L$(SUPPORT_DIR) -Wl,--gc-sections
 
 SRCS = kernel/mrtos.c port/msp430fr59xx/port.c app/main_fr5994.c
 
