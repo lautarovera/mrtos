@@ -19,6 +19,13 @@ mrtos/
 └── Makefile.host           host test build (gcc)
 ```
 
+> **Full documentation:** the reference/user manual lives in
+> [doc/manual/](doc/manual/README.md) — architecture, API, port
+> contract, hardware constraints, build integration, and the complete
+> verification story. The executable test plan is
+> [doc/VALIDATION.md](doc/VALIDATION.md). This README is the short
+> version.
+
 ## Design
 
 ### Scheduling model
