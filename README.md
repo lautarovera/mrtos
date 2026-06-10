@@ -187,10 +187,21 @@ cmake -B build-msp430 --toolchain cmake/msp430fr5994.cmake \
 cmake --build build-msp430        # -Os; prints section sizes
 ```
 
-One-shot validation runner (host suite + optional target build):
+The same suite also runs on the **real MSP430 ISA** without hardware,
+via the GNU simulator bundled with msp430-gcc (`msp430-elf-run`) and the
+`port/msp430sim` port (real CPUX `PUSHM.A`/`POPM.A` context switch):
 
 ```sh
-uv run tools/run_tests.py [--target] [--clean]
+cmake -B build-sim --toolchain cmake/msp430sim.cmake \
+      -DMSP430_GCC_DIR=/path/to/msp430-gcc
+cmake --build build-sim && ctest --test-dir build-sim
+```
+
+One-shot validation runner (host suite + optional simulator suite and
+target build):
+
+```sh
+uv run tools/run_tests.py [--sim] [--target] [--clean]
 ```
 
 ### Plain Makefiles (kept for non-CMake consumers)

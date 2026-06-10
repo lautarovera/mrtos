@@ -32,6 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOST_BUILD = ROOT / "build-host"
 TARGET_BUILD = ROOT / "build-msp430"
+SIM_BUILD = ROOT / "build-sim"
 
 # FR5994: 8 KiB classic FRAM window for code in the small memory model
 # would be wrong to assert here; what we do bound is total FRAM (256 KiB)
@@ -50,16 +51,16 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def host_suite() -> tuple[int, int, list[str]]:
-    """Configure, build and run the CTest suite. Returns (passed, total, failed-names)."""
-    p = run(["cmake", "-B", HOST_BUILD, "-DCMAKE_BUILD_TYPE=Debug", "-S", ROOT])
+def ctest_suite(build_dir: Path, extra_cfg: list[str]) -> tuple[int, int, list[str]]:
+    """Configure, build and run a CTest suite. Returns (passed, total, failed-names)."""
+    p = run(["cmake", "-B", build_dir, "-S", ROOT, *extra_cfg])
     if p.returncode != 0:
-        fail(f"host configure failed:\n{p.stdout}{p.stderr}")
-    p = run(["cmake", "--build", HOST_BUILD, "--parallel"])
+        fail(f"configure failed:\n{p.stdout}{p.stderr}")
+    p = run(["cmake", "--build", build_dir, "--parallel"])
     if p.returncode != 0:
-        fail(f"host build failed:\n{p.stdout}{p.stderr}")
+        fail(f"build failed:\n{p.stdout}{p.stderr}")
 
-    p = run(["ctest", "--test-dir", HOST_BUILD, "--output-on-failure"])
+    p = run(["ctest", "--test-dir", build_dir, "--output-on-failure"])
     print(p.stdout)
     tests = re.findall(r"Test\s+#\d+: (\S+) \.+(?:\*+Exception:\s*\S+|\s+(\w+))",
                        p.stdout)
@@ -102,31 +103,49 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="mRTOS validation runner")
     ap.add_argument("--target", action="store_true",
                     help="also cross-build the MSP430FR5994 image")
+    ap.add_argument("--sim", action="store_true",
+                    help="also run the suite on the GNU MSP430 simulator")
     ap.add_argument("--clean", action="store_true",
                     help="remove build directories first")
     opts = ap.parse_args()
 
     if opts.clean:
-        for d in (HOST_BUILD, TARGET_BUILD):
+        for d in (HOST_BUILD, TARGET_BUILD, SIM_BUILD):
             shutil.rmtree(d, ignore_errors=True)
 
     print("=== host test suite (POSIX port) ===")
-    passed, total, failed = host_suite()
+    passed, total, failed = ctest_suite(HOST_BUILD, ["-DCMAKE_BUILD_TYPE=Debug"])
+
+    sim_result = None
+    if opts.sim:
+        if not os.environ.get("MSP430_GCC_DIR"):
+            fail("--sim requested but MSP430_GCC_DIR is not set")
+        print("\n=== simulator test suite (MSP430 ISA, msp430-elf-run) ===")
+        sim_result = ctest_suite(SIM_BUILD, [
+            "--toolchain", str(ROOT / "cmake" / "msp430sim.cmake"),
+            "-DCMAKE_BUILD_TYPE=Release",
+            f"-DMSP430_GCC_DIR={os.environ['MSP430_GCC_DIR']}"])
 
     size_report = None
     if opts.target:
         print("\n=== target build (MSP430FR5994, -Os) ===")
         size_report = target_build()
 
+    any_failed = bool(failed) or total == 0
     print("\n=== summary ===")
     print(f"host tests : {passed}/{total} passed"
           + (f"  FAILED: {', '.join(failed)}" if failed else ""))
+    if sim_result:
+        s_passed, s_total, s_failed = sim_result
+        any_failed |= bool(s_failed) or s_total == 0
+        print(f"sim tests  : {s_passed}/{s_total} passed"
+              + (f"  FAILED: {', '.join(s_failed)}" if s_failed else ""))
     if size_report:
         print(f"target     : build OK, {size_report}")
     elif opts.target:
         print("target     : FAILED")
 
-    sys.exit(0 if not failed and total > 0 else 1)
+    sys.exit(1 if any_failed else 0)
 
 
 if __name__ == "__main__":

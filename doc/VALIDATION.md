@@ -11,7 +11,8 @@ Prerequisites: gcc, cmake ≥ 3.20, [uv](https://docs.astral.sh/uv/).
 
 ```sh
 uv run tools/run_tests.py            # host suite only
-uv run tools/run_tests.py --target   # + MSP430 cross-build (needs toolchain)
+uv run tools/run_tests.py --sim      # + same suite on the MSP430 ISA (simulator)
+uv run tools/run_tests.py --target   # + MSP430FR5994 cross-build
 ```
 
 Toolchain for `--target` (no registration needed, public TI mirror):
@@ -39,13 +40,34 @@ export MSP430_SUPPORT_DIR=$HOME/toolchains/msp430-gcc-support-files/include
 
 Pass criterion: `ctest` reports 6/6; the runner exits 0.
 
+### Simulator stage (`--sim`)
+
+QEMU has no MSP430 support; the practical simulator is the GNU one
+(`msp430-elf-run`), which ships inside TI's msp430-gcc. It emulates the
+CPU/CPUX instruction set but **no peripherals or interrupts**, so the
+fr59xx port can't run on it. Instead, `port/msp430sim/` is a cooperative
+port (like POSIX) whose context switch is **real CPUX assembly**
+(`PUSHM.A`/`POPM.A`, SP parked in the TCB — the same register protocol as
+the fr59xx ISRs). Running the suite there validates what the host can't:
+
+- the kernel compiled by msp430-gcc at `-Os` (16-bit `int`, 16-bit
+  pointers, real integer promotion/overflow behavior);
+- 20-bit register save/restore and stack-frame layout on the actual ISA.
+
+Build quirk, documented in `port/msp430sim/port.c`: the simulator aborts
+if SP ever drops below the heap break (which starts at `_end`), so task
+stacks live in a fixed pool at 0xA000–0xEFFF rather than in the
+caller-supplied `.bss` arrays.
+
 ### Known coverage gap (by design)
 
-The POSIX port is **cooperative**: ticks advance only while idle runs, so
-asynchronous preemption (a tick landing between two arbitrary
-instructions) never happens on host. Races that depend on it — ISR-driven
-`sem_give`, tick-vs-pended-yield ordering, time-slice preemption of a
-CPU-bound task — are only exercised on target (section 2, T4–T6).
+Both the POSIX port and the simulator port are **cooperative**: ticks
+advance only while idle runs, so asynchronous preemption (a tick landing
+between two arbitrary instructions) never happens off-target. Races that
+depend on it — ISR-driven `sem_give`, tick-vs-pended-yield ordering,
+time-slice preemption of a CPU-bound task — are only exercised on target
+(section 2, T4–T6). Also not simulated: Timer_A, LPM behavior, FRAM wait
+states.
 
 ## 2. On-target checklist (MSP-EXP430FR5994)
 
@@ -69,5 +91,6 @@ Record results per release tag (toolchain version, board revision, date).
 | Configuration | Command | Status checked by |
 |---|---|---|
 | Host, Debug | `cmake -B build-host && ctest --test-dir build-host` | runner |
+| Simulator, `-Os` | `cmake --toolchain cmake/msp430sim.cmake …` + CTest via `msp430-elf-run` | runner (`--sim`) |
 | Target, `-Os` | `cmake --toolchain cmake/msp430fr5994.cmake …` | runner (`--target`), SRAM bound asserted |
 | Legacy Makefiles | `make -f Makefile.host run` · `make GCC_DIR=…` | manual, kept for non-CMake consumers |
