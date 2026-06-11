@@ -118,6 +118,12 @@ void port_yield_isr(void)
 #if (PORT_TICK_CYCLES < 2) || (PORT_TICK_CYCLES > 65534)
 #error "Tick period out of range for 16-bit Timer_A; adjust TICK_HZ/SMCLK"
 #endif
+#if (PORT_TIMER_HZ % MRTOS_CFG_TICK_HZ) != 0
+/* A truncated divider would make every tick slightly short - the
+ * kernel's time base would run fast with no visible error anywhere.
+ * Pick a TICK_HZ that divides SMCLK/8 exactly. */
+#error "SMCLK/8 is not an integer multiple of TICK_HZ; tick would drift"
+#endif
 
 static void port_tick_timer_init(void)
 {

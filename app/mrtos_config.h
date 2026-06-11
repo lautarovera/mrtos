@@ -7,6 +7,10 @@
 #define MRTOS_CFG_IDLE_STACK_WORDS 64u
 #define MRTOS_CFG_STACK_CHECK      1
 
+/* MUST match what board_init() programs into the clock system: the
+ * port derives the tick timer reload from this value, so a mismatch
+ * skews the kernel time base. Compile-time checks in the port enforce
+ * range and exact divisibility, not agreement with the hardware. */
 #define PORT_CFG_SMCLK_HZ          8000000UL
 #define PORT_CFG_ISR_STACK_WORDS   96u
 
