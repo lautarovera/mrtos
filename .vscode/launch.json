@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug on LaunchPad (eZ-FET)",
+            "type": "cppdbg",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/mrtos_fr5994.elf",
+            "MIMode": "gdb",
+            "miDebuggerPath": "${workspaceFolder}/tools/msp430-gdb.sh",
+            "miDebuggerServerAddress": "localhost:2000",
+            "preLaunchTask": "mspdebug gdbserver",
+            // The gdbserver task already programmed the flash; just
+            // reset so we stop at the entry point with fresh state.
+            "postRemoteConnectCommands": [
+                { "text": "monitor reset" }
+            ],
+            "setupCommands": [
+                { "text": "set mem inaccessible-by-default off" }
+            ],
+            "hardwareBreakpoints": { "require": false, "limit": 3 }
+        }
+    ]
+}

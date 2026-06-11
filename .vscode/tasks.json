@@ -1,0 +1,34 @@
+{
+    // Requires MSP430_GCC_DIR in the environment VSCode was launched
+    // from (e.g. `make debug` / `code .` in a configured shell).
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build fr5994",
+            "type": "shell",
+            "command": "make mrtos_fr5994.elf",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "mspdebug gdbserver",
+            "type": "shell",
+            "command": "make gdbserver",
+            "dependsOn": ["build fr5994"],
+            "isBackground": true,
+            // Signal "ready" to the debugger when mspdebug binds the
+            // port; anything matching endsPattern unblocks the launch.
+            "problemMatcher": {
+                "pattern": [
+                    { "regexp": "^(ERROR|FAIL)(.*)$", "file": 1, "message": 2 }
+                ],
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "Bound to port"
+                }
+            },
+            "presentation": { "panel": "dedicated", "reveal": "always" }
+        }
+    ]
+}
