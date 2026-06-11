@@ -17,6 +17,8 @@ override only what you need.
 | `MRTOS_CFG_SLICE_TICKS` | `10` | Round-robin quantum among equal-priority tasks. `1` = rotate every tick; large values approximate run-to-completion within a priority. |
 | `MRTOS_CFG_IDLE_STACK_WORDS` | `64` | Idle task stack, in `port_stack_t` units. Must also absorb ISR frames on the MSP430 (§4.6). |
 | `MRTOS_CFG_STACK_CHECK` | `1` | Guard-word stack tripwire (§1.13). Disable only where the port owns the stack layout (POSIX port). |
+| `MRTOS_CFG_STACK_USAGE` | `1` | Paint stacks at creation and enable `mrtos_stack_unused()` high-water marking (§2.6). Off: no paint cost, the function returns 0. |
+| `PORT_CFG_SMCLK_HZ` | `8000000` | (MSP430 port) SMCLK frequency the board actually configures. The port derives the tick reload from it; range and exact divisibility by `MRTOS_CFG_TICK_HZ` are enforced at compile time — agreement with the real clock is the application's responsibility. |
 
 Fixed constants:
 
@@ -163,7 +165,23 @@ for the item type). Copy semantics both ways.
 - Senders/receivers blocked on a full/empty queue wake in priority
   order, not send order.
 
-## 2.6 Hooks
+## 2.6 Diagnostics
+
+```c
+size_t mrtos_stack_unused(const mrtos_tcb_t *t);
+```
+High-water mark: how many words of `t`'s stack were never written
+since creation (stacks are painted with `MRTOS_STACK_PAINT` at
+`mrtos_task_create()`). Use it to size stacks from evidence: run the
+worst-case workload, read the marks, keep a margin. O(stack size)
+linear scan — call from idle/diagnostic code, not hot paths.
+
+Two caveats. A task that legitimately stores the paint value at its
+deepest extent under-reports by those words (inherent to the
+technique). And the mark *includes* the context-save area the port
+pushes on preemption/retirement (24–26 words on the MSP430 ports) —
+that floor is real usage and must stay inside your budget; it
+dominates the mark of otherwise-shallow tasks.
 
 ```c
 void mrtos_stack_overflow_hook(mrtos_tcb_t *t);   /* weak */

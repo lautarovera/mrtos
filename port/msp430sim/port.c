@@ -60,13 +60,22 @@ port_stack_t *port_stack_init(port_stack_t *base, size_t words,
 {
     static port_stack_t *pool_next = POOL_BASE;
     (void)base;
-    (void)arg;                       /* tramp reads mrtos_cur instead */
     if ((char *)POOL_BASE < _end + 1024 ||
         pool_next + words > POOL_END) {
         fprintf(stderr, "[sim] stack pool exhausted/overlaps heap\n");
         exit(2);
     }
     g_shell = shell;
+    /* Point the TCB at the pool chunk (the stack actually used) and
+     * repaint it, so mrtos_stack_unused() measures genuine MSP430
+     * frames instead of the untouched caller array. arg is the TCB by
+     * the kernel's calling convention (tramp reads mrtos_cur). */
+    mrtos_tcb_t *t = (mrtos_tcb_t *)arg;
+    t->stack_base = pool_next;
+#if MRTOS_CFG_STACK_USAGE
+    for (size_t i = 0; i < words; i++)
+        pool_next[i] = (port_stack_t)MRTOS_STACK_PAINT;
+#endif
     port_stack_t *sp = pool_next + words;
     pool_next += words;
     *--sp = (port_stack_t)tramp;     /* RET target (16-bit, small model) */

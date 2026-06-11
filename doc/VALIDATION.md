@@ -35,6 +35,7 @@ export MSP430_SUPPORT_DIR=$HOME/toolchains/msp430-gcc-support-files/include
 | `test_unit_sem` | initial count, poll take, limit saturation, block/give, exact timeout, wake by priority, FIFO within a priority, timeout cleanup |
 | `test_unit_mutex` | uncontended lock, `ERR_OWNER` paths (recursion, foreign unlock), poll fail, waiter timeout leaves owner intact, PI on READY owner, PI on BLOCKED owner (wait-list re-sort), multi-waiter hand-off in priority order |
 | `test_unit_queue` | poll on empty/full, FIFO across wraparound, copy semantics, struct items, recv/send timeouts, blocked sender completion |
+| `test_unit_stack` | stack painting, high-water marking (`mrtos_stack_unused`), overflow absence; on the simulator the marks are genuine MSP430 frame sizes |
 | `test_integration` | 2-producer/2-consumer stress (no loss, no duplication, per-stream order), same-tick timeout-vs-give race (exactly-one-token invariant), Mesa wakeup steal + re-block, priority inversion bounded by inheritance |
 | `test_kernel` | original 12-assertion smoke test |
 
