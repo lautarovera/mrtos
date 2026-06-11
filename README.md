@@ -218,8 +218,19 @@ uv run tools/run_tests.py [--sim] [--target] [--clean]
 Host tests: `make -f Makefile.host run`
 
 Target: install TI's msp430-gcc + support files, then
-`make GCC_DIR=/path/to/msp430-gcc`. Flash `mrtos_fr5994.elf` with
-MSP-FET/mspdebug (`tilib`, eZ-FET on the LaunchPad).
+`make GCC_DIR=/path/to/msp430-gcc`.
+
+### Flash, run and debug on the LaunchPad
+
+After the one-time `tools/setup_debug_tools.sh` (see `doc/DEBUG.md`,
+including WSL2/USB notes):
+
+```sh
+make run         # program via the onboard eZ-FET and run free
+make gdbserver   # GDB server on :2000 (terminal 1)
+make gdb         # CLI debug session       (terminal 2)
+make debug       # open VSCode; F5 = full source-level debugging
+```
 
 ## Test suite
 
