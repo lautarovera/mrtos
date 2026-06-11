@@ -5,6 +5,7 @@ set(MRTOS_TESTS
     test_unit_sem
     test_unit_mutex
     test_unit_queue
+    test_unit_stack
     test_integration)
 if(MRTOS_PORT STREQUAL "posix")
     # Original smoke test: hardcodes ucontext-sized stacks, host-only.

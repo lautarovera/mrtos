@@ -62,10 +62,14 @@ def ctest_suite(build_dir: Path, extra_cfg: list[str]) -> tuple[int, int, list[s
 
     p = run(["ctest", "--test-dir", build_dir, "--output-on-failure"])
     print(p.stdout)
-    tests = re.findall(r"Test\s+#\d+: (\S+) \.+(?:\*+Exception:\s*\S+|\s+(\w+))",
-                       p.stdout)
+    # Result lines: "... test_name ...   Passed", "...***Failed" or
+    # "...***Exception: SegFault". Anything that is not literally
+    # "Passed" counts as a failure.
+    tests = re.findall(r"Test\s+#\d+: (\S+) \.+\**\s*(\w+)", p.stdout)
     passed = [name for name, status in tests if status == "Passed"]
     failed = [name for name, status in tests if status != "Passed"]
+    if p.returncode != 0 and not failed:
+        failed = ["<ctest failed but no test parsed as failing>"]
     return len(passed), len(tests), failed
 
 

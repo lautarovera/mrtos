@@ -261,6 +261,10 @@ void mrtos_task_create(mrtos_tcb_t *tcb, const char *name,
     tcb->state       = MRTOS_TASK_READY;
     tcb->stack_base  = stack;
     tcb->stack_words = stack_words;
+#if MRTOS_CFG_STACK_USAGE
+    for (size_t i = 0; i < stack_words; i++)
+        stack[i] = (port_stack_t)MRTOS_STACK_PAINT;
+#endif
 #if MRTOS_CFG_STACK_CHECK
     stack[0] = (port_stack_t)STACK_MAGIC;
     stack[1] = (port_stack_t)STACK_MAGIC;
@@ -316,6 +320,23 @@ void mrtos_sleep(uint16_t ticks)
     uint16_t key = port_irq_save();
     block_current(NULL, ticks);
     port_irq_restore(key);
+}
+
+size_t mrtos_stack_unused(const mrtos_tcb_t *t)
+{
+#if MRTOS_CFG_STACK_USAGE
+    /* Skip the guard words: they hold STACK_MAGIC, not the paint. */
+    size_t start = MRTOS_CFG_STACK_CHECK ? 2u : 0u;
+    const port_stack_t *p = t->stack_base + start;
+    size_t n = 0;
+    while (n < t->stack_words - start &&
+           p[n] == (port_stack_t)MRTOS_STACK_PAINT)
+        n++;
+    return n;
+#else
+    (void)t;
+    return 0;
+#endif
 }
 
 __attribute__((weak)) void mrtos_stack_overflow_hook(mrtos_tcb_t *t)

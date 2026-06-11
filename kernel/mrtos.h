@@ -34,6 +34,13 @@ extern "C" {
 #ifndef MRTOS_CFG_STACK_CHECK
 #define MRTOS_CFG_STACK_CHECK      1
 #endif
+#ifndef MRTOS_CFG_STACK_USAGE
+#define MRTOS_CFG_STACK_USAGE      1   /* paint stacks, enable high-water */
+#endif
+
+/* Stack paint pattern (distinct from the 0x5AFE guard words). Ports
+ * that substitute their own stack memory repaint with this value. */
+#define MRTOS_STACK_PAINT   0xC35Au
 
 #define MRTOS_PRIO_LEVELS   8u             /* 0 = idle (lowest) .. 7     */
 #define MRTOS_PRIO_MAX      (MRTOS_PRIO_LEVELS - 1u)
@@ -142,6 +149,13 @@ int  mrtos_queue_recv(mrtos_queue_t *q, void *item, uint16_t timeout);
 
 /* Weak hook: called with interrupts disabled on guard corruption.      */
 void mrtos_stack_overflow_hook(mrtos_tcb_t *t);
+
+/* High-water mark: words of t's stack never touched since creation
+ * (0 when MRTOS_CFG_STACK_USAGE is off). O(stack size) scan - call it
+ * from diagnostics/idle code, not hot paths. Standard paint-pattern
+ * caveat: a task that legitimately writes MRTOS_STACK_PAINT at its
+ * deepest extent under-reports by those words.                         */
+size_t mrtos_stack_unused(const mrtos_tcb_t *t);
 
 /* ------------------------------------------------------------------ */
 /* Kernel entry points used by the PORT (not by application code)       */
