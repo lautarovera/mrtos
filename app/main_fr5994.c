@@ -75,10 +75,17 @@ static void task_ui(void *arg)
     (void)arg;
     for (;;) {
         mrtos_sem_take(&btn_sem, MRTOS_FOREVER);
-        P1OUT ^= BIT1;
-        mrtos_sleep(MRTOS_MS(30));             /* crude debounce window */
+        /* The ISR fires on falling edges - but RELEASING the button
+         * bounces through falling edges too. Settle, then accept the
+         * event only if the line still reads pressed: release bounces
+         * wake us, read high, and are rejected. (Found on silicon:
+         * fast press/release sequences double-toggled.) */
+        mrtos_sleep(MRTOS_MS(5));
+        if ((P5IN & BIT6) == 0)
+            P1OUT ^= BIT1;
+        mrtos_sleep(MRTOS_MS(25));             /* refractory window     */
         P5IFG &= ~BIT6;
-        mrtos_sem_init(&btn_sem, 0, 1);        /* drop bounces          */
+        mrtos_sem_init(&btn_sem, 0, 1);        /* drop queued bounces   */
     }
 }
 
