@@ -93,7 +93,8 @@ states.
 
 ## 2. On-target checklist (MSP-EXP430FR5994)
 
-Flash: `mspdebug tilib "prog build-msp430/mrtos_fr5994.elf"` (eZ-FET).
+Flash & run: `make run` (see `doc/DEBUG.md` for one-time setup;
+`tools/check_board.sh` diagnoses the USB/probe chain step by step).
 
 | # | Test | Procedure | Pass criterion |
 |---|---|---|---|

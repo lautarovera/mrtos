@@ -29,16 +29,21 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 ### WSL2: pass the USB device through first
 
-WSL2 has no native USB. On the **Windows** side (once:
-`winget install usbipd`), with the LaunchPad plugged in:
+WSL2 has no native USB. In an **elevated (admin) PowerShell on
+Windows**, with the LaunchPad plugged in:
 
 ```powershell
+winget install usbipd             # once; reopen the terminal after
 usbipd list                       # find the TI eZ-FET busid (VID 0451:BEF3)
-usbipd bind   --busid <X-Y>       # once, as admin
-usbipd attach --wsl --busid <X-Y> # each time it is (re)plugged
+usbipd bind   --busid <X-Y>       # once per device (admin required)
+usbipd attach --wsl --busid <X-Y> # after every replug / Windows reboot
 ```
 
-Then `lsusb` inside WSL must show `0451:bef3 Texas Instruments`.
+Then verify inside WSL with `tools/check_board.sh` — it walks the
+whole chain (device visible → permissions → tools → probe handshake)
+and prints the exact fix for the first broken link. Tip:
+`usbipd attach --wsl --busid <X-Y> --auto-attach` keeps re-attaching
+across replugs so you do not repeat the last step every time.
 
 ## 2. CLI workflow (make targets)
 
