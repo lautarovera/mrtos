@@ -15,14 +15,10 @@ uv run tools/run_tests.py --sim      # + same suite on the MSP430 ISA (simulator
 uv run tools/run_tests.py --target   # + MSP430FR5994 cross-build
 ```
 
-Toolchain for `--target` (no registration needed, public TI mirror):
+Toolchain for `--target` (public TI mirror, no registration):
 
 ```sh
-mkdir -p ~/toolchains && cd ~/toolchains
-curl -O https://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-9.3.1.11_linux64.tar.bz2
-curl -O https://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-support-files-1.212.zip
-tar xjf msp430-gcc-9.3.1.11_linux64.tar.bz2
-python3 -m zipfile -e msp430-gcc-support-files-1.212.zip .
+tools/setup_toolchain.sh
 ```
 
 With this layout (`~/toolchains/`), every tool in the repo
