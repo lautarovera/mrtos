@@ -54,3 +54,4 @@ dkms.conf
 build*/
 test_kernel
 energy.csv
+energy.png
