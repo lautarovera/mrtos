@@ -5,8 +5,11 @@ its onboard **eZ-FET** probe, from the CLI or from VSCode.
 
 ## 1. One-time setup
 
-Prerequisite: the msp430-gcc toolchain (see `doc/VALIDATION.md`) with
-`MSP430_GCC_DIR` exported.
+Prerequisite: the msp430-gcc toolchain (see `doc/VALIDATION.md`).
+Installed under `~/toolchains/` (the documented layout), everything —
+Makefile, the tools/ scripts, the uv runners — **auto-detects it**; no
+environment variables needed. Non-standard locations: export
+`MSP430_GCC_DIR`/`MSP430_SUPPORT_DIR`, or `source tools/env.sh`.
 
 ```sh
 tools/setup_debug_tools.sh
@@ -73,8 +76,8 @@ TI's debug stack installed), `GDB_PORT` (default 2000), `GCC_DIR` /
 `.vscode/` ships ready-made (needs the **C/C++** extension,
 `ms-vscode.cpptools` — auto-recommended on open):
 
-1. Launch VSCode from a shell where `MSP430_GCC_DIR` is exported —
-   `make debug` does exactly that.
+1. Open VSCode in the repo (`make debug`, or `code .`). The gdb
+   wrapper auto-detects the toolchain under `~/toolchains/`.
 2. Press **F5** ("Debug on LaunchPad (eZ-FET)").
 3. The `mspdebug gdbserver` task starts in a panel (programs the board,
    binds `:2000`); the debugger attaches through

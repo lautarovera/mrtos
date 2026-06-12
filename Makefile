@@ -3,13 +3,22 @@
 #   https://www.ti.com/tool/MSP430-GCC-OPENSOURCE
 # Point GCC_DIR / SUPPORT_DIR at your installation.
 
-# Honor the MSP430_GCC_DIR/MSP430_SUPPORT_DIR convention used by the
-# CMake toolchain files and tools/run_tests.py.
-ifdef MSP430_GCC_DIR
+# Toolchain resolution, in priority order:
+#   1. GCC_DIR/SUPPORT_DIR given on the command line
+#   2. MSP430_GCC_DIR/MSP430_SUPPORT_DIR from the environment
+#   3. newest install under ~/toolchains (the doc/VALIDATION.md layout)
+#   4. /opt/ti/msp430-gcc
+ifndef MSP430_GCC_DIR
+MSP430_GCC_DIR := $(lastword $(sort $(wildcard $(HOME)/toolchains/msp430-gcc-*_linux64)))
+endif
+ifneq ($(MSP430_GCC_DIR),)
 GCC_DIR     ?= $(MSP430_GCC_DIR)
 endif
 GCC_DIR     ?= /opt/ti/msp430-gcc
-ifdef MSP430_SUPPORT_DIR
+ifndef MSP430_SUPPORT_DIR
+MSP430_SUPPORT_DIR := $(wildcard $(HOME)/toolchains/msp430-gcc-support-files/include)
+endif
+ifneq ($(MSP430_SUPPORT_DIR),)
 SUPPORT_DIR ?= $(MSP430_SUPPORT_DIR)
 endif
 SUPPORT_DIR ?= $(GCC_DIR)/include

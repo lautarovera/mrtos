@@ -7,7 +7,13 @@
 # Makefile debug rules and .vscode/launch.json invoke.
 set -eu
 
-: "${MSP430_GCC_DIR:?set MSP430_GCC_DIR to your msp430-gcc install}"
+# Auto-detect the newest install under ~/toolchains when unset.
+if [ -z "${MSP430_GCC_DIR:-}" ]; then
+    for _d in "$HOME"/toolchains/msp430-gcc-*_linux64; do
+        [ -d "$_d" ] && MSP430_GCC_DIR=$_d
+    done
+fi
+: "${MSP430_GCC_DIR:?no msp430-gcc found - see doc/VALIDATION.md}"
 
 LD_LIBRARY_PATH="$MSP430_GCC_DIR/extlib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
     exec "$MSP430_GCC_DIR/bin/msp430-elf-gdb" "$@"
