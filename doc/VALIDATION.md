@@ -137,7 +137,7 @@ Procedure notes from the first bench run (2026-06-12):
 | T5 | **PASS** | `cons_checksum` = 1035 at `tick_count` = 4500 — exactly n(n+1)/2 for 46 sends at 100 ms; tick count exact to the tick |
 | T6 | **PASS** | > 1 h running: LED1 steady, S1 responsive |
 | T7 | **PASS** | hook hit with `t = tcb_blink` ("blink"), `guard[0]=0, guard[1]=0x5afe` observed in the debugger |
-| T8 | **PASS** | EnergyTrace 30 s / 114k samples: **MCU baseline 277 µA** (LED-off phase) — consistent with LPM0 floor + 1 kHz tick. Whole-board avg 1806 µA is LED1-dominated (LED ≈ 2.9 mA when lit, 50 % duty). Profile: `energy.png` via `uv run tools/plot_energy.py`. **277 µA is the tickless-comparison baseline** |
+| T8 | **PASS** | EnergyTrace 30 s / 114k samples: **MCU baseline 277 µA** (LED-off phase) — consistent with LPM0 floor + 1 kHz tick. Whole-board avg 1806 µA is LED1-dominated (LED ≈ 2.9 mA when lit, 50 % duty). Profile archived: [doc/results/2026-06-13/t8-energy-profile.png](results/2026-06-13/t8-energy-profile.png) (raw trace gzipped alongside). **277 µA is the tickless-comparison baseline** |
 
 Bonus data — stack high-water marks on silicon (96-word stacks, incl.
 guards): blink 34, ui 36, prod 35, cons 41 words used. Consistent with
