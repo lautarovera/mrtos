@@ -11,7 +11,13 @@
 # rule but does not install it. See doc/DEBUG.md (incl. WSL2/usbipd).
 set -eu
 
-: "${MSP430_GCC_DIR:?set MSP430_GCC_DIR to your msp430-gcc install}"
+# Auto-detect the newest install under ~/toolchains when unset.
+if [ -z "${MSP430_GCC_DIR:-}" ]; then
+    for _d in "$HOME"/toolchains/msp430-gcc-*_linux64; do
+        [ -d "$_d" ] && MSP430_GCC_DIR=$_d
+    done
+fi
+: "${MSP430_GCC_DIR:?no msp430-gcc found - see doc/VALIDATION.md}"
 TOOLDIR="${MSPDEBUG_DIR:-$HOME/toolchains/mspdebug}"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

@@ -9,6 +9,11 @@
 EZFET_VID=0451
 EZFET_PID=bef3
 TOOLDIR="${MSPDEBUG_DIR:-$HOME/toolchains/mspdebug}"
+if [ -z "${MSP430_GCC_DIR:-}" ]; then
+    for _d in "$HOME"/toolchains/msp430-gcc-*_linux64; do
+        [ -d "$_d" ] && MSP430_GCC_DIR=$_d
+    done
+fi
 ok()   { printf '  [ok]   %s\n' "$1"; }
 bad()  { printf '  [FAIL] %s\n       -> %s\n' "$1" "$2"; FAILED=1; }
 FAILED=0
@@ -57,8 +62,8 @@ else
 fi
 if [ -n "$MSP430_GCC_DIR" ] && [ -e "$MSP430_GCC_DIR/extlib/libncursesw.so.5" ]; then
     ok "msp430-elf-gdb support libs present"
-elif [ -z "$MSP430_GCC_DIR" ]; then
-    bad "MSP430_GCC_DIR not set" "export MSP430_GCC_DIR=\$HOME/toolchains/msp430-gcc-9.3.1.11_linux64"
+elif [ -z "${MSP430_GCC_DIR:-}" ]; then
+    bad "no msp430-gcc under ~/toolchains" "see doc/VALIDATION.md toolchain download"
 else
     bad "gdb ncurses5 libs missing" "run tools/setup_debug_tools.sh"
 fi

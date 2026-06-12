@@ -34,6 +34,18 @@ HOST_BUILD = ROOT / "build-host"
 TARGET_BUILD = ROOT / "build-msp430"
 SIM_BUILD = ROOT / "build-sim"
 
+
+def detect_toolchain() -> None:
+    """Default MSP430_GCC_DIR / MSP430_SUPPORT_DIR from ~/toolchains."""
+    if not os.environ.get("MSP430_GCC_DIR"):
+        hits = sorted(Path.home().glob("toolchains/msp430-gcc-*_linux64"))
+        if hits:
+            os.environ["MSP430_GCC_DIR"] = str(hits[-1])
+    if not os.environ.get("MSP430_SUPPORT_DIR"):
+        sup = Path.home() / "toolchains/msp430-gcc-support-files/include"
+        if sup.is_dir():
+            os.environ["MSP430_SUPPORT_DIR"] = str(sup)
+
 # FR5994: 8 KiB classic FRAM window for code in the small memory model
 # would be wrong to assert here; what we do bound is total FRAM (256 KiB)
 # and SRAM (4 KiB + 4 KiB LEA). The .elf must at minimum fit SRAM.
@@ -112,6 +124,7 @@ def main() -> None:
     ap.add_argument("--clean", action="store_true",
                     help="remove build directories first")
     opts = ap.parse_args()
+    detect_toolchain()
 
     if opts.clean:
         for d in (HOST_BUILD, TARGET_BUILD, SIM_BUILD):

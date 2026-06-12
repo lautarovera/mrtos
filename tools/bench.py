@@ -86,7 +86,13 @@ def main() -> None:
 
     gcc_dir = os.environ.get("MSP430_GCC_DIR")
     if not gcc_dir:
-        sys.exit("ERROR: MSP430_GCC_DIR is not set")
+        hits = sorted(Path.home().glob("toolchains/msp430-gcc-*_linux64"))
+        if hits:
+            gcc_dir = str(hits[-1])
+            os.environ["MSP430_GCC_DIR"] = gcc_dir
+    if not gcc_dir:
+        sys.exit("ERROR: no msp430-gcc found (set MSP430_GCC_DIR "
+                 "or install under ~/toolchains, see doc/VALIDATION.md)")
 
     if opts.build:
         subprocess.run(

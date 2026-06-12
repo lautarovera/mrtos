@@ -23,9 +23,12 @@ curl -O https://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3
 curl -O https://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-support-files-1.212.zip
 tar xjf msp430-gcc-9.3.1.11_linux64.tar.bz2
 python3 -m zipfile -e msp430-gcc-support-files-1.212.zip .
-export MSP430_GCC_DIR=$HOME/toolchains/msp430-gcc-9.3.1.11_linux64
-export MSP430_SUPPORT_DIR=$HOME/toolchains/msp430-gcc-support-files/include
 ```
+
+With this layout (`~/toolchains/`), every tool in the repo
+auto-detects the toolchain — no environment variables required. Only
+for non-standard locations: export `MSP430_GCC_DIR` /
+`MSP430_SUPPORT_DIR` (or `source tools/env.sh`).
 
 ### What the suite covers
 
