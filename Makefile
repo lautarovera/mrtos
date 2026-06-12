@@ -84,4 +84,15 @@ debug:
 	code .
 	@echo "VSCode launched - press F5 (Debug on LaunchPad)."
 
-.PHONY: clean flash run gdbserver gdb debug
+# EnergyTrace capture (T8): charge-pulse counting in the eZ-FET's
+# DC-DC converter - integrates even sub-us spikes into the energy
+# total by construction. NOTE: starting a capture restarts the target.
+ENERGYTRACE ?= LD_LIBRARY_PATH=$(TI_DLL_DIR) $(HOME)/toolchains/energytrace/energytrace
+DUR ?= 10
+energy:
+	$(ENERGYTRACE) $(DUR) | tee energy.csv | awk '!/^#/ { n++; i += $$2; e = $$4; t = $$1 } \
+	    END { printf "samples=%d  avg_current=%.1f uA  energy=%.3f mJ  over %.2f s\n", \
+	          n, i/n*1e6, e*1e3, t }'
+	@echo "raw trace in energy.csv (time/current/voltage/energy)"
+
+.PHONY: clean flash run gdbserver gdb debug energy

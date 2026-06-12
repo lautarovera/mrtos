@@ -52,6 +52,32 @@ else
     cp -P gdblibs/lib/x86_64-linux-gnu/* "$MSP430_GCC_DIR/extlib/"
 fi
 
+ET_DIR="$HOME/toolchains/energytrace"
+if [ -x "$ET_DIR/energytrace" ]; then
+    echo "energytrace-util already present - skipping"
+else
+    echo "== building energytrace-util (EnergyTrace CLI, needs TI stack) =="
+    cd "$WORK"
+    git clone --depth 1 https://github.com/carrotIndustries/energytrace-util.git
+    mkdir -p energytrace-util/inc
+    base=https://raw.githubusercontent.com/osresearch/MSPDebugStack/master/DLL430_v3/include
+    for h in MSP430.h MSP430_EnergyTrace.h MSP430_Debug.h MSP430_FET.h DLL430_SYMBOL.h; do
+        curl -s -o "energytrace-util/inc/$h" "$base/$h"
+    done
+    TI_DLL=""
+    for d in /opt/ti/msp430-gcc-full/bin "$HOME/ti/msp430-gcc-full/bin"; do
+        [ -e "$d/libmsp430.so" ] && TI_DLL=$d
+    done
+    if [ -n "$TI_DLL" ]; then
+        gcc -Ienergytrace-util/inc -o energytrace-util/energytrace \
+            energytrace-util/energytrace.c -L"$TI_DLL" -lmsp430
+        mkdir -p "$ET_DIR"
+        cp energytrace-util/energytrace "$ET_DIR/"
+    else
+        echo "  (skipped: TI debug stack not installed - see doc/DEBUG.md)"
+    fi
+fi
+
 LD_LIBRARY_PATH="$TOOLDIR/lib" "$TOOLDIR/mspdebug" --version | head -1
 "$(dirname "$0")/msp430-gdb.sh" --version | head -1
 

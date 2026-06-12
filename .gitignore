@@ -53,3 +53,4 @@ dkms.conf
 # Build trees
 build*/
 test_kernel
+energy.csv
