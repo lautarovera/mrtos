@@ -108,7 +108,7 @@ Flash & run: `make run` (see `doc/DEBUG.md` for one-time setup;
 | T5 | Queue under preemption | Debugger: watch `cons_checksum` | Strictly increasing by n(n+1)/2 pattern (sum of 0,1,2,…); producer/consumer at equal prio time-slice correctly |
 | T6 | Soak | Leave running ≥ 1 h with periodic S1 presses | Still responsive; LED1 still 1 Hz; `cons_checksum` still advancing |
 | T7 | Stack guard | Test build: a task corrupts its own `stack_base[0]` then busy-spins; debugger breaks on the hook (see note) | Execution traps in `mrtos_stack_overflow_hook` with `t->name` identifying the task |
-| T8 | Low power | **EnergyTrace**: `make energy DUR=30`, no button activity (restarts the target — run after T6) | Average current consistent with LPM0 idle (CPU mostly asleep, wakes 1000×/s for tick); record the value — it is the baseline for the tickless comparison |
+| T8 | Low power | **EnergyTrace**: `make energy DUR=30`, no button activity (restarts the target — run after T6); plot with `uv run tools/plot_energy.py` (LED-off phase = MCU baseline) | Average current consistent with LPM0 idle (CPU mostly asleep, wakes 1000×/s for tick); record the value — it is the baseline for the tickless comparison |
 
 Procedure notes from the first bench run (2026-06-12):
 
@@ -139,9 +139,9 @@ Procedure notes from the first bench run (2026-06-12):
 | T3 | **PASS** | after the release-bounce fix: 1 press = 1 toggle at any cadence (first build double-toggled — release bounces; fixed in app) |
 | T4 | **PASS** | aggressive S1 bursts: no hang, LED1 timing unaffected on the LA |
 | T5 | **PASS** | `cons_checksum` = 1035 at `tick_count` = 4500 — exactly n(n+1)/2 for 46 sends at 100 ms; tick count exact to the tick |
-| T6 | pending | ≥ 1 h soak |
+| T6 | **PASS** | > 1 h running: LED1 steady, S1 responsive |
 | T7 | **PASS** | hook hit with `t = tcb_blink` ("blink"), `guard[0]=0, guard[1]=0x5afe` observed in the debugger |
-| T8 | pending | ammeter on 3V3 jumper |
+| T8 | **PASS** | EnergyTrace 30 s / 114k samples: **MCU baseline 277 µA** (LED-off phase) — consistent with LPM0 floor + 1 kHz tick. Whole-board avg 1806 µA is LED1-dominated (LED ≈ 2.9 mA when lit, 50 % duty). Profile: `energy.png` via `uv run tools/plot_energy.py`. **277 µA is the tickless-comparison baseline** |
 
 Bonus data — stack high-water marks on silicon (96-word stacks, incl.
 guards): blink 34, ui 36, prod 35, cons 41 words used. Consistent with
