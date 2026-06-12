@@ -60,6 +60,27 @@ if SP ever drops below the heap break (which starts at `_end`), so task
 stacks live in a fixed pool at 0xA000–0xEFFF rather than in the
 caller-supplied `.bss` arrays.
 
+### Micro-benchmark (`tools/bench.py`)
+
+`bench/bench.c` brackets each kernel primitive between two empty marker
+functions; `tools/bench.py` drives `msp430-elf-gdb`'s built-in
+simulator to count single-stepped instructions per interval.
+Deterministic to the instruction (ideal for CI regression tracking),
+**not** cycle-accurate (1–6 cycles per MSP430 instruction, FRAM wait
+states unmodeled). Reference values at `-Os`, msp430-gcc 9.3.1.11:
+
+| Metric | Instructions |
+|---|---|
+| one-way context switch (yield) | ~52 |
+| sem_give → waiter running (full hand-off) | ~132 |
+| queue send / recv (poll) | ~77 |
+| mutex lock + unlock (uncontended) | ~73 |
+| tick, no sleepers | ~45 |
+| tick, 8 sleepers | ~56 (O(1) delta list: not 8×) |
+
+On target the same markers become GPIO toggles: cycle-exact numbers
+via logic analyzer or Timer_A reads — planned with the HIL bench.
+
 ### Known coverage gap (by design)
 
 Both the POSIX port and the simulator port are **cooperative**: ticks
