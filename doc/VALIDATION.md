@@ -107,10 +107,37 @@ Flash & run: `make run` (see `doc/DEBUG.md` for one-time setup;
 | T4 | ISR-safe API under load | Hold S1 bursts while LED1 blinks | No hang, no blink disturbance — exercises `sem_give` from PORT5 ISR + deferred yield after RETI |
 | T5 | Queue under preemption | Debugger: watch `cons_checksum` | Strictly increasing by n(n+1)/2 pattern (sum of 0,1,2,…); producer/consumer at equal prio time-slice correctly |
 | T6 | Soak | Leave running ≥ 1 h with periodic S1 presses | Still responsive; LED1 still 1 Hz; `cons_checksum` still advancing |
-| T7 | Stack guard | Debugger: set a task stack word `stack[0]` ≠ 0x5AFE | Execution traps in `mrtos_stack_overflow_hook` with `t->name` identifying the task |
+| T7 | Stack guard | Test build: a task corrupts its own `stack_base[0]` then busy-spins; debugger breaks on the hook (see note) | Execution traps in `mrtos_stack_overflow_hook` with `t->name` identifying the task |
 | T8 | Low power | Ammeter on the 3V3 jumper, no button activity | Average current consistent with LPM0 idle (CPU mostly asleep, wakes 1000×/s for tick) |
 
-Record results per release tag (toolchain version, board revision, date).
+Procedure notes from the first bench run (2026-06-12):
+
+- **The debug stub resets the chip** on first resume after (re)attach
+  (tilib), so state poked from gdb before boot is wiped by
+  re-initialization, and post-mortem state can't be read by attaching
+  after the fact. Drive T7 with a self-corrupting test build plus a
+  hardware breakpoint on the hook.
+- **The guard check covers the *running* task only** (each tick checks
+  `mrtos_cur`). Corrupting the guard of a mostly-sleeping task never
+  triggers; the test task must stay busy after corrupting itself.
+
+### First bench results — 2026-06-12, msp430-gcc 9.3.1.11, LaunchPad rev ?
+
+| # | Result | Measurement |
+|---|---|---|
+| T1 | **PASS** | LED1 1 Hz, verified against a clock |
+| T2 | **PASS** | period 1.00661–1.00663 s (LA): +0.66 % offset = DCO tolerance (tick math exact); **jitter ≈ 20 µs/1 s ≈ 20 ppm, 50× under the 1-tick bound**; half-period 503.31–503.34 ms; unchanged under S1 storms |
+| T3 | **PASS** | after the release-bounce fix: 1 press = 1 toggle at any cadence (first build double-toggled — release bounces; fixed in app) |
+| T4 | **PASS** | aggressive S1 bursts: no hang, LED1 timing unaffected on the LA |
+| T5 | **PASS** | `cons_checksum` = 1035 at `tick_count` = 4500 — exactly n(n+1)/2 for 46 sends at 100 ms; tick count exact to the tick |
+| T6 | pending | ≥ 1 h soak |
+| T7 | **PASS** | hook hit with `t = tcb_blink` ("blink"), `guard[0]=0, guard[1]=0x5afe` observed in the debugger |
+| T8 | pending | ammeter on 3V3 jumper |
+
+Bonus data — stack high-water marks on silicon (96-word stacks, incl.
+guards): blink 34, ui 36, prod 35, cons 41 words used. Consistent with
+the simulator's context-save floor (26 words); ~55 words of headroom
+everywhere.
 
 ## 3. Build configurations validated
 
