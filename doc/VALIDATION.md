@@ -108,7 +108,7 @@ Flash & run: `make run` (see `doc/DEBUG.md` for one-time setup;
 | T5 | Queue under preemption | Debugger: watch `cons_checksum` | Strictly increasing by n(n+1)/2 pattern (sum of 0,1,2,…); producer/consumer at equal prio time-slice correctly |
 | T6 | Soak | Leave running ≥ 1 h with periodic S1 presses | Still responsive; LED1 still 1 Hz; `cons_checksum` still advancing |
 | T7 | Stack guard | Test build: a task corrupts its own `stack_base[0]` then busy-spins; debugger breaks on the hook (see note) | Execution traps in `mrtos_stack_overflow_hook` with `t->name` identifying the task |
-| T8 | Low power | Ammeter on the 3V3 jumper, no button activity | Average current consistent with LPM0 idle (CPU mostly asleep, wakes 1000×/s for tick) |
+| T8 | Low power | **EnergyTrace**: `make energy DUR=30`, no button activity (restarts the target — run after T6) | Average current consistent with LPM0 idle (CPU mostly asleep, wakes 1000×/s for tick); record the value — it is the baseline for the tickless comparison |
 
 Procedure notes from the first bench run (2026-06-12):
 
@@ -120,6 +120,15 @@ Procedure notes from the first bench run (2026-06-12):
 - **The guard check covers the *running* task only** (each tick checks
   `mrtos_cur`). Corrupting the guard of a mostly-sleeping task never
   triggers; the test task must stay busy after corrupting itself.
+- **T8 uses EnergyTrace, not an ammeter.** The FR5994 LaunchPad's
+  eZ-FET implements EnergyTrace++ — a software-controlled DC-DC
+  converter whose charge pulses are *counted*, so the energy integral
+  captures even sub-µs spikes that any sampling ammeter would miss;
+  current is derived from energy over time (nA-class average
+  resolution). `make energy` drives it from the CLI (energytrace-util
+  + libmsp430). The ++ part (per-peripheral and LPM state tracing from
+  inside the chip) is only exposed by CCS's GUI — worth a look when
+  optimizing the tickless port, not needed for the T8 number.
 
 ### First bench results — 2026-06-12, msp430-gcc 9.3.1.11, LaunchPad rev ?
 
