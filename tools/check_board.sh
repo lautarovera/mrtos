@@ -6,8 +6,10 @@
 # Chain: usbipd (Windows) -> WSL kernel -> USB device visible ->
 #        permissions -> mspdebug built -> probe answers.
 
-EZFET_VID=0451
-EZFET_PID=bef3
+# Known TI debug probes: modern eZ-FET (LaunchPads) enumerates as
+# 2047:0013 "MSP Tools Driver"; 2047:0014 is the MSP-FET; 0451:bef3
+# is the older eZ-FET VID some firmware revisions report.
+PROBE_IDS="2047:0013 2047:0014 0451:bef3"
 TOOLDIR="${MSPDEBUG_DIR:-$HOME/toolchains/mspdebug}"
 if [ -z "${MSP430_GCC_DIR:-}" ]; then
     for _d in "$HOME"/toolchains/msp430-gcc-*_linux64; do
@@ -18,24 +20,26 @@ ok()   { printf '  [ok]   %s\n' "$1"; }
 bad()  { printf '  [FAIL] %s\n       -> %s\n' "$1" "$2"; FAILED=1; }
 FAILED=0
 
-echo "== 1. WSL2: is the eZ-FET visible? =="
-found=""
+echo "== 1. WSL2: is the debug probe visible? =="
+found=""; found_id=""
 for d in /sys/bus/usb/devices/*/idVendor; do
     [ -e "$d" ] || continue
-    vid=$(cat "$d"); pid=$(cat "${d%idVendor}idProduct" 2>/dev/null)
-    if [ "$vid" = "$EZFET_VID" ] && [ "$pid" = "$EZFET_PID" ]; then
-        found="${d%/idVendor}"
-    fi
+    id="$(cat "$d"):$(cat "${d%idVendor}idProduct" 2>/dev/null)"
+    for probe in $PROBE_IDS; do
+        if [ "$id" = "$probe" ]; then
+            found="${d%/idVendor}"; found_id=$id
+        fi
+    done
 done
 if [ -n "$found" ]; then
-    ok "TI eZ-FET ($EZFET_VID:$EZFET_PID) at $found"
+    ok "TI debug probe ($found_id, $(cat "$found/product" 2>/dev/null)) at $found"
 else
-    bad "no eZ-FET on the WSL USB bus" \
+    bad "no TI probe on the WSL USB bus" \
         "attach it from Windows (admin PowerShell):
           winget install usbipd            # once
-          usbipd list                      # find the 0451:bef3 busid
+          usbipd list                      # find the 'MSP Debug Interface' busid (2047:0013)
           usbipd bind --busid <X-Y>        # once per device
-          usbipd attach --wsl --busid <X-Y>  # after every replug/reboot"
+          usbipd attach --wsl --busid <X-Y> --auto-attach"
 fi
 
 echo "== 2. permissions =="
@@ -45,10 +49,11 @@ if [ -n "$found" ]; then
     if [ -w "$node" ]; then
         ok "$node is writable"
     else
+        vid=${found_id%:*}
         bad "$node not writable by $(id -un)" \
-            "echo 'ATTRS{idVendor}==\"$EZFET_VID\", ATTRS{idProduct}==\"$EZFET_PID\", MODE=\"0666\"' | sudo tee /etc/udev/rules.d/99-ezfet.rules
+            "echo 'SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", MODE=\"0666\"' | sudo tee /etc/udev/rules.d/99-tiprobe.rules
           sudo udevadm control --reload && sudo udevadm trigger
-          then detach/attach the device again (usbipd attach --wsl ...)"
+          then re-run this script (replug/reattach if still failing)"
     fi
 else
     echo "  [skip] no device"

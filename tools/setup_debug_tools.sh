@@ -58,8 +58,8 @@ LD_LIBRARY_PATH="$TOOLDIR/lib" "$TOOLDIR/mspdebug" --version | head -1
 cat <<'EOF'
 
 Done. One-time USB permission setup (needs root):
-  echo 'ATTRS{idVendor}=="0451", ATTRS{idProduct}=="bef3", MODE="0666"' \
-    | sudo tee /etc/udev/rules.d/99-ezfet.rules
+  echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="2047", MODE="0666"' \
+    | sudo tee /etc/udev/rules.d/99-tiprobe.rules
   sudo udevadm control --reload && sudo udevadm trigger
 On WSL2, first attach the LaunchPad from Windows: see doc/DEBUG.md.
 EOF

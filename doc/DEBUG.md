@@ -25,8 +25,8 @@ builds, with no root needed:
 USB permission for the probe (this one does need root, once):
 
 ```sh
-echo 'ATTRS{idVendor}=="0451", ATTRS{idProduct}=="bef3", MODE="0666"' \
-  | sudo tee /etc/udev/rules.d/99-ezfet.rules
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="2047", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-tiprobe.rules
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
@@ -37,7 +37,7 @@ Windows**, with the LaunchPad plugged in:
 
 ```powershell
 winget install usbipd             # once; reopen the terminal after
-usbipd list                       # find the TI eZ-FET busid (VID 0451:BEF3)
+usbipd list                       # find "MSP Debug Interface" (VID:PID 2047:0013)
 usbipd bind   --busid <X-Y>       # once per device (admin required)
 usbipd attach --wsl --busid <X-Y> # after every replug / Windows reboot
 ```
