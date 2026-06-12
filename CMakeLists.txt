@@ -54,6 +54,12 @@ if(PROJECT_IS_TOP_LEVEL)
             enable_testing()
             add_subdirectory(test)
         endif()
+        if(MRTOS_PORT STREQUAL "msp430sim")
+            # Instruction-count micro-benchmark, driven by tools/bench.py
+            # (gdb target sim counts instructions between markers).
+            add_executable(bench bench/bench.c)
+            target_link_libraries(bench PRIVATE mrtos::mrtos)
+        endif()
     elseif(MRTOS_PORT STREQUAL "msp430fr59xx")
         # Reference application: LaunchPad MSP-EXP430FR5994 demo.
         add_executable(mrtos_fr5994.elf app/main_fr5994.c)

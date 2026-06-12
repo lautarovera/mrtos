@@ -133,6 +133,23 @@ jobs:
           { echo '### MSP430 build'; echo '```'
             sed -n '/=== summary ===/,$p' ci-run.log; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Micro-benchmark (instruction counts, regression-visible)
+        shell: bash
+        run: |
+          export MSP430_GCC_DIR=$HOME/toolchains/msp430-gcc-${MSP430_GCC_VER}_linux64
+          # gdb needs the ncurses5 compat libs (see tools/setup_debug_tools.sh)
+          if [ ! -e "$MSP430_GCC_DIR/extlib/libncursesw.so.5" ]; then
+            base=http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses
+            curl -sO "$base/libncursesw5_6.3-2ubuntu0.1_amd64.deb"
+            curl -sO "$base/libtinfo5_6.3-2ubuntu0.1_amd64.deb"
+            dpkg -x libncursesw5_*.deb gdblibs && dpkg -x libtinfo5_*.deb gdblibs
+            mkdir -p "$MSP430_GCC_DIR/extlib"
+            cp -P gdblibs/lib/x86_64-linux-gnu/* "$MSP430_GCC_DIR/extlib/"
+          fi
+          uv run tools/bench.py --markdown bench.md
+          { echo '### Kernel primitive costs (simulator, instructions)'
+            cat bench.md
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload firmware image and build log
         if: always()
         uses: actions/upload-artifact@v4
