@@ -73,11 +73,32 @@ else
     bad "gdb ncurses5 libs missing" "run tools/setup_debug_tools.sh"
 fi
 
-echo "== 4. probe handshake =="
+echo "== 4. TI debug stack (FRAM write capability) =="
+TI_DLL=""
+for d in /opt/ti/msp430-gcc-full/bin "$HOME/ti/msp430-gcc-full/bin"; do
+    [ -e "$d/libmsp430.so" ] && TI_DLL=$d
+done
+if [ -n "$TI_DLL" ]; then
+    ok "libmsp430.so at $TI_DLL (tilib driver)"
+    DRV=tilib
+else
+    bad "TI debug stack not installed - ezfet fallback CANNOT write FR5994 FRAM" \
+        "sudo ~/toolchains/full-installer/msp430-gcc-full-linux-x64-installer-9.3.1.2.run \\
+              --mode unattended --prefix /opt/ti/msp430-gcc-full"
+    DRV=ezfet
+fi
+if [ -n "$found" ] && ! ls /dev/ttyACM* >/dev/null 2>&1; then
+    bad "probe attached but no /dev/ttyACM* (CDC driver unbound)" \
+        "udev tty rule + physically replug the board:
+          echo 'KERNEL==\"ttyACM*\", ATTRS{idVendor}==\"2047\", MODE=\"0666\"' | sudo tee /etc/udev/rules.d/99-tiprobe-tty.rules
+          sudo udevadm control --reload"
+fi
+
+echo "== 5. probe handshake =="
 if [ "$FAILED" = 0 ]; then
-    if LD_LIBRARY_PATH=$TOOLDIR/lib "$TOOLDIR/mspdebug" ezfet "exit" 2>&1 \
-         | grep -qi "fw\|Device:\|MSP430"; then
-        ok "eZ-FET answers - you are ready: make run"
+    if LD_LIBRARY_PATH=$TI_DLL:$TOOLDIR/lib "$TOOLDIR/mspdebug" $DRV "exit" 2>&1 \
+         | grep -q "Device:"; then
+        ok "probe answers and identified the device - you are ready: make run"
     else
         bad "probe did not answer" \
             "check the cable (must be data-capable), replug + usbipd attach, then re-run"

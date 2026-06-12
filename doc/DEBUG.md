@@ -22,13 +22,35 @@ builds, with no root needed:
 | `mspdebug` (git) | distro packages predate the `ezfet` driver the LaunchPad needs; built against extracted .deb libs | `~/toolchains/mspdebug/` |
 | ncurses5 libs | TI's `msp430-elf-gdb` links `libncursesw.so.5`, dropped by modern distros; fetched from the Ubuntu archive | `$MSP430_GCC_DIR/extlib/` (used via `tools/msp430-gdb.sh`) |
 
-USB permission for the probe (this one does need root, once):
+Three steps need root, once:
+
+**TI debug stack** — required: mspdebug's builtin `ezfet` driver *reads*
+the FR5994 fine but its 2013 chip database makes FRAM **writes silently
+fail** (programming reports success, memory unchanged — found the hard
+way; the doctor now checks for this). The stack ships in TI's full
+installer (downloaded by the toolchain steps):
+
+```sh
+sudo ~/toolchains/full-installer/msp430-gcc-full-linux-x64-installer-9.3.1.2.run \
+     --mode unattended --prefix /opt/ti/msp430-gcc-full
+```
+
+The make targets auto-select the `tilib` driver when the stack is
+present.
+
+**USB permissions** (probe + its CDC serial channels):
 
 ```sh
 echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="2047", MODE="0666"' \
   | sudo tee /etc/udev/rules.d/99-tiprobe.rules
+echo 'KERNEL=="ttyACM*", ATTRS{idVendor}=="2047", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-tiprobe-tty.rules
 sudo udevadm control --reload && sudo udevadm trigger
 ```
+
+Replug the board after adding the rules. Note: if a raw-USB tool ever
+leaves the CDC interfaces driverless (`/dev/ttyACM0` missing while the
+device is attached), a physical replug rebinds them.
 
 ### WSL2: pass the USB device through first
 

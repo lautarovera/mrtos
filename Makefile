@@ -47,8 +47,16 @@ clean:
 # One-time setup: tools/setup_debug_tools.sh; full guide: doc/DEBUG.md #
 # ------------------------------------------------------------------ #
 MSPDEBUG_DIR ?= $(HOME)/toolchains/mspdebug
-MSPDEBUG     ?= LD_LIBRARY_PATH=$(MSPDEBUG_DIR)/lib $(MSPDEBUG_DIR)/mspdebug
+# TI debug stack (libmsp430.so): required for reliable FRAM writes on
+# the FR5994 - mspdebug's builtin ezfet driver reads fine but its 2013
+# chip database makes FRAM *writes* silently fail. tilib is the default
+# whenever the stack is installed (sudo, see doc/DEBUG.md).
+TI_DLL_DIR   ?= $(firstword $(wildcard /opt/ti/msp430-gcc-full/bin) $(wildcard $(HOME)/ti/msp430-gcc-full/bin))
+ifneq ($(TI_DLL_DIR),)
+MSPDEBUG_DRV ?= tilib
+endif
 MSPDEBUG_DRV ?= ezfet
+MSPDEBUG     ?= LD_LIBRARY_PATH=$(TI_DLL_DIR):$(MSPDEBUG_DIR)/lib $(MSPDEBUG_DIR)/mspdebug
 GDB          ?= MSP430_GCC_DIR=$(GCC_DIR) tools/msp430-gdb.sh
 GDB_PORT     ?= 2000
 
