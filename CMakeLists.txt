@@ -67,5 +67,14 @@ if(PROJECT_IS_TOP_LEVEL)
         add_custom_command(TARGET mrtos_fr5994.elf POST_BUILD
             COMMAND ${CMAKE_SIZE_UTIL} $<TARGET_FILE:mrtos_fr5994.elf>
             COMMENT "Section sizes")
+        # Cycle-exact micro-benchmark on silicon: markers read a free-
+        # running TA1 (1 count = 1 cycle) into bench_min[], read out via
+        # the debugger (make bench-read). Same bench/bench.c as the sim.
+        add_executable(bench_fr5994.elf bench/bench.c)
+        target_compile_definitions(bench_fr5994.elf PRIVATE BENCH_TARGET)
+        target_link_libraries(bench_fr5994.elf PRIVATE mrtos::mrtos)
+        add_custom_command(TARGET bench_fr5994.elf POST_BUILD
+            COMMAND ${CMAKE_SIZE_UTIL} $<TARGET_FILE:bench_fr5994.elf>
+            COMMENT "Section sizes")
     endif()
 endif()

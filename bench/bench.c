@@ -5,33 +5,41 @@
  *
  *   bench_mark_a();  <operation under test>  ...  bench_mark_b();
  *
- * The markers carry no timing code, which keeps the measured path
- * pristine. How an interval becomes a number depends on where it runs:
+ * The markers carry no timing logic of their own beyond a single timer
+ * read, which keeps the measured path pristine. How an interval becomes
+ * a number depends on where it runs:
  *
- *   - GNU MSP430 simulator: tools/bench.py drives msp430-elf-gdb
- *     (target sim), breaks on both markers and counts single-stepped
- *     instructions in between. Deterministic to the instruction -
- *     ideal for CI regression tracking. Not cycle-accurate (MSP430
- *     instructions take 1-6 cycles; FRAM wait states not modeled).
- *   - MSP430FR5994 target (future): the markers toggle a GPIO and the
- *     interval is measured externally (logic analyzer) or with a
- *     free-running Timer_A read at the same two points.
+ *   - GNU MSP430 simulator (default build): markers are empty; tools/
+ *     bench.py drives msp430-elf-gdb (target sim), breaks on both and
+ *     counts single-stepped instructions in between. Deterministic to
+ *     the instruction. Not cycle-accurate (1-6 cycles/instruction; FRAM
+ *     wait states not modeled).
+ *   - MSP430FR5994 target (-DBENCH_TARGET): markers read a free-running
+ *     Timer_A (TA1) at SMCLK = 8 MHz, so 1 count = 1 CPU cycle = 125 ns.
+ *     The minimum delta per metric (over many samples) is kept in
+ *     bench_min[], read out via the debugger (make bench-read). A GPIO
+ *     (P1.2) toggles in step for a logic-analyzer cross-check.
  *
  * Intervals may span a context switch (mark_a in the signaler, mark_b
- * first thing in the woken task), so "signal-to-wake" includes the
- * full hand-off: wake + preemption check + context switch + return
- * from the blocking call.
+ * first thing in the woken task), so "signal-to-wake" includes the full
+ * hand-off. On target YIELD/SEM_WAKE bracket a *real* preemptive switch
+ * (the cooperative sim cannot), making those numbers richer there.
  *
- * The metric sequence and sample count are a contract with
- * tools/bench.py: BENCH_N_INTERVALS = metrics x samples, in bench_id
- * order.
+ * The metric sequence and sample count are a contract with tools/
+ * bench.py: BENCH_N_INTERVALS = metrics x samples, in bench_id order.
  */
-#include <stdlib.h>
 #include "mrtos.h"
 
+#ifdef BENCH_TARGET
+#include <msp430.h>
+#define SAMPLES        32u    /* min over many rejects tick-ISR hits */
+#define STK_WORDS      64u    /* FR5994 SRAM is 4 KB: keep stacks lean */
+#else
+#include <stdlib.h>
 #define SAMPLES        3
-#define N_SLEEPERS     8
 #define STK_WORDS      256u
+#endif
+#define N_SLEEPERS     8
 
 /* Metric ids, reported by tools/bench.py in this order. */
 enum {
@@ -48,8 +56,36 @@ enum {
 
 volatile uint8_t bench_id;
 
+#ifdef BENCH_TARGET
+volatile uint16_t bench_min[BM_COUNT];   /* min cycles per metric     */
+volatile uint8_t  bench_done;            /* debugger polls this       */
+static uint16_t   bench_t0;
+
+void __attribute__((noinline)) bench_mark_a(void)
+{
+    bench_t0 = TA1R;
+    P1OUT |= BIT2;                        /* LA marker high            */
+}
+void __attribute__((noinline)) bench_mark_b(void)
+{
+    uint16_t d = (uint16_t)(TA1R - bench_t0);
+    P1OUT &= ~BIT2;
+    if (d < bench_min[bench_id])
+        bench_min[bench_id] = d;
+}
+
+/* mrtos_tick() is the ISR body; calling it from preemptible task
+ * context would race the real TA0 tick ISR. Measure it as it actually
+ * runs: with interrupts masked. (Other metrics rely on min to reject
+ * the occasional tick that lands mid-interval.) */
+#define BENCH_TICK_GUARD_ENTER  uint16_t _k = port_irq_save()
+#define BENCH_TICK_GUARD_EXIT   port_irq_restore(_k)
+#else
 void __attribute__((noinline)) bench_mark_a(void) { __asm__ volatile("nop"); }
 void __attribute__((noinline)) bench_mark_b(void) { __asm__ volatile("nop"); }
+#define BENCH_TICK_GUARD_ENTER  ((void)0)
+#define BENCH_TICK_GUARD_EXIT   ((void)0)
+#endif
 
 static mrtos_tcb_t  t_ctl, t_peer, t_waiter, t_slp[N_SLEEPERS];
 static port_stack_t s_ctl[STK_WORDS], s_peer[STK_WORDS], s_wtr[STK_WORDS],
@@ -63,7 +99,7 @@ static uint16_t      qstore[4];
 static void peer_task(void *arg)
 {
     (void)arg;
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_b();                /* end of ctl's one-way switch */
         mrtos_yield();
     }
@@ -73,7 +109,7 @@ static void peer_task(void *arg)
 static void waiter_task(void *arg)
 {
     (void)arg;
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         mrtos_sem_take(&sem, MRTOS_FOREVER);
         bench_mark_b();                /* running again: hand-off done */
     }
@@ -91,7 +127,7 @@ static void controller(void *arg)
     uint16_t v = 42;
 
     bench_id = BM_BASELINE;
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         bench_mark_b();
     }
@@ -99,7 +135,7 @@ static void controller(void *arg)
     bench_id = BM_YIELD;
     mrtos_task_create(&t_peer, "peer", peer_task, NULL, 6,
                       s_peer, STK_WORDS);
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_yield();                 /* peer runs mark_b, yields back */
     }
@@ -109,7 +145,7 @@ static void controller(void *arg)
     mrtos_sem_init(&sem, 0, 1);
     mrtos_task_create(&t_waiter, "wtr", waiter_task, NULL, 7,
                       s_wtr, STK_WORDS);    /* preempts, blocks on sem */
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_sem_give(&sem);          /* waiter preempts, marks b */
     }
@@ -117,22 +153,26 @@ static void controller(void *arg)
 
     bench_id = BM_QSEND;
     mrtos_queue_init(&q, qstore, sizeof(uint16_t), 4);
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_queue_send(&q, &v, 0);
         bench_mark_b();
+        mrtos_queue_recv(&q, &v, 0);   /* drain so the queue never fills */
     }
     bench_id = BM_QRECV;
-    for (int i = 0; i < SAMPLES; i++) {
+    mrtos_queue_send(&q, &v, 0);
+    for (unsigned i = 0; i < SAMPLES; i++) {
+        mrtos_queue_send(&q, &v, 0);
         bench_mark_a();
         mrtos_queue_recv(&q, &v, 0);
         bench_mark_b();
     }
+    mrtos_queue_recv(&q, &v, 0);
 
     bench_id = BM_MUTEX;
     static mrtos_mutex_t mtx;
     mrtos_mutex_init(&mtx);
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_mutex_lock(&mtx, 0);
         mrtos_mutex_unlock(&mtx);
@@ -141,10 +181,12 @@ static void controller(void *arg)
 
     /* Tick cost with an empty delay list... */
     bench_id = BM_TICK0;
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
+        BENCH_TICK_GUARD_ENTER;
         bench_mark_a();
         mrtos_tick();
         bench_mark_b();
+        BENCH_TICK_GUARD_EXIT;
     }
 
     /* ...and with 8 sleepers parked: must not get more expensive
@@ -154,17 +196,58 @@ static void controller(void *arg)
                           s_slp[i], STK_WORDS);
     mrtos_sleep(1);                    /* let them enter the delay list */
     bench_id = BM_TICK8;
-    for (int i = 0; i < SAMPLES; i++) {
+    for (unsigned i = 0; i < SAMPLES; i++) {
+        BENCH_TICK_GUARD_ENTER;
         bench_mark_a();
         mrtos_tick();
         bench_mark_b();
+        BENCH_TICK_GUARD_EXIT;
     }
 
+#ifdef BENCH_TARGET
+    bench_done = 1;                    /* results ready for the debugger */
+    for (;;)
+        __bis_SR_register(LPM0_bits);
+#else
     exit(0);
+#endif
 }
+
+#ifdef BENCH_TARGET
+static void bench_board_init(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;
+
+    P1OUT = 0; P1DIR = 0xFF;
+    P2OUT = 0; P2DIR = 0xFF;
+    P3OUT = 0; P3DIR = 0xFF;
+    P4OUT = 0; P4DIR = 0xFF;
+    P5OUT = 0; P5DIR = 0xFF;
+    P6OUT = 0; P6DIR = 0xFF;
+    P7OUT = 0; P7DIR = 0xFF;
+    P8OUT = 0; P8DIR = 0xFF;
+    PJOUT = 0; PJDIR = 0xFF;
+    PM5CTL0 &= ~LOCKLPM5;
+
+    /* DCO = MCLK = SMCLK = 8 MHz (0 FRAM wait states), ACLK = VLO. */
+    CSCTL0_H = CSKEY_H;
+    CSCTL1   = DCOFSEL_3 | DCORSEL;
+    CSCTL2   = SELA__VLOCLK | SELS__DCOCLK | SELM__DCOCLK;
+    CSCTL3   = DIVA__1 | DIVS__1 | DIVM__1;
+    CSCTL0_H = 0;
+
+    /* TA1 free-running at SMCLK: 1 count = 1 CPU cycle (125 ns). */
+    TA1CTL = TASSEL__SMCLK | MC__CONTINUOUS | TACLR;
+}
+#endif
 
 int main(void)
 {
+#ifdef BENCH_TARGET
+    bench_board_init();
+    for (int i = 0; i < BM_COUNT; i++)
+        bench_min[i] = 0xFFFFu;
+#endif
     mrtos_init();
     mrtos_task_create(&t_ctl, "ctl", controller, NULL, 6,
                       s_ctl, STK_WORDS);
