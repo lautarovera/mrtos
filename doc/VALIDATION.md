@@ -109,15 +109,30 @@ sample; its width should match the timer figure for that metric.
 Results (`-Os`, msp430-gcc 9.3.1.11, MCLK = SMCLK = 8 MHz,
 2026-06-13; baseline 17 cycles subtracted):
 
-| Metric | Cycles | µs | sim insns |
-|---|---|---|---|
-| one-way context switch (yield) | 202 | 25.25 | 52 |
-| sem_give → waiter running | 367 | 45.88 | 132 |
-| queue send (poll) | 158 | 19.75 | 78 |
-| queue recv (poll) | 157 | 19.63 | 79 |
-| mutex lock + unlock | 289 | 36.13 | 73 |
-| tick, no sleepers | 118 | 14.75 | 45 |
-| tick, 8 sleepers | 139 | 17.38 | 56 |
+| Metric | Cycles | bench µs | LA µs | sim insns |
+|---|---|---|---|---|
+| one-way context switch (yield) | 202 | 25.25 | 29 | 52 |
+| sem_give → waiter running | 367 | 45.88 | 50 | 132 |
+| queue send (poll) | 158 | 19.75 | — | 78 |
+| queue recv (poll) | 157 | 19.63 | — | 79 |
+| mutex lock + unlock | 289 | 36.13 | — | 73 |
+| tick, no sleepers | 118 | 14.75 | — | 45 |
+| tick, 8 sleepers | 139 | 17.38 | — | 56 |
+
+**LA cross-check** (Saleae on P1.2, 24 MS/s, 2026-06-13): the logic
+analyzer independently confirms the timer figures. Measured pulse
+widths — baseline 2.25 µs (the marker overhead itself), **yield 29 µs**,
+**sem_give→waiter 50 µs** — match `bench µs` to within a few µs. The LA
+reads slightly high because the kernel records the **minimum** of 32
+samples while the wire shows a *typical* pulse, and the 1 kHz tick ISR
+(~15 µs) widens some samples (the spread you see across a burst — the
+narrowest pulse lands on `bench µs`). Pulse *period* = ON + inter-sample
+gap (e.g. yield 58.75 µs = 29 µs + ~30 µs for the peer to yield back).
+Only yield and sem_wake are individually resolvable on the one-shot
+signal: `q_send`/`q_recv`/`mutex`/`tick_0` run back-to-back with no gap
+and smear into one mixed burst (the `—` rows). A per-metric replay mode
+(one clean pulse each, gap-separated) would fill them — see git history
+if enabled.
 
 Reading these: cycles run ~2–4× the sim instruction counts — expected
 (MSP430 ops take 1–6 cycles and FRAM adds wait states). YIELD and
