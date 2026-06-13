@@ -106,17 +106,28 @@ cannot), so those numbers are the true hand-off cost.
 Cross-check: a logic analyzer on **P1.2** sees one high pulse per
 sample; its width should match the timer figure for that metric.
 
-Results — _fill at the bench_ (`-Os`, msp430-gcc 9.3.1.11, 8 MHz):
+Results (`-Os`, msp430-gcc 9.3.1.11, MCLK = SMCLK = 8 MHz,
+2026-06-13; baseline 17 cycles subtracted):
 
 | Metric | Cycles | µs | sim insns |
 |---|---|---|---|
-| one-way context switch (yield) | TBD | TBD | 52 |
-| sem_give → waiter running | TBD | TBD | 132 |
-| queue send (poll) | TBD | TBD | 78 |
-| queue recv (poll) | TBD | TBD | 79 |
-| mutex lock + unlock | TBD | TBD | 73 |
-| tick, no sleepers | TBD | TBD | 45 |
-| tick, 8 sleepers | TBD | TBD | 56 |
+| one-way context switch (yield) | 202 | 25.25 | 52 |
+| sem_give → waiter running | 367 | 45.88 | 132 |
+| queue send (poll) | 158 | 19.75 | 78 |
+| queue recv (poll) | 157 | 19.63 | 79 |
+| mutex lock + unlock | 289 | 36.13 | 73 |
+| tick, no sleepers | 118 | 14.75 | 45 |
+| tick, 8 sleepers | 139 | 17.38 | 56 |
+
+Reading these: cycles run ~2–4× the sim instruction counts — expected
+(MSP430 ops take 1–6 cycles and FRAM adds wait states). YIELD and
+SEM_WAKE carry a **real preemptive context switch** (the TA0CCR1
+software-yield ISR), which the cooperative sim never exercises, so
+their ratio is highest. MUTEX includes the unconditional re-evaluation
+`port_yield()` in `mrtos_mutex_unlock()` — a full self-switch
+round-trip even with no waiter. Most importantly, **tick, 8 sleepers
+(139) is only +21 cycles over tick, no sleepers (118), not 8×** — the
+delta-list O(1) tick, confirmed on silicon.
 
 ### Known coverage gap (by design)
 
