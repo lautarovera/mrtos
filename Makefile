@@ -39,8 +39,16 @@ mrtos_fr5994.elf: $(SRCS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRCS)
 	$(GCC_DIR)/bin/msp430-elf-size $@
 
+# Cycle-exact benchmark image: same bench/bench.c as the simulator,
+# built for the FR5994 with the TA1/GPIO markers (-DBENCH_TARGET).
+BENCH_SRCS = kernel/mrtos.c port/msp430fr59xx/port.c bench/bench.c
+
+bench_fr5994.elf: $(BENCH_SRCS)
+	$(CC) $(CFLAGS) -DBENCH_TARGET $(LDFLAGS) -o $@ $(BENCH_SRCS)
+	$(GCC_DIR)/bin/msp430-elf-size $@
+
 clean:
-	rm -f mrtos_fr5994.elf
+	rm -f mrtos_fr5994.elf bench_fr5994.elf
 
 # ------------------------------------------------------------------ #
 # On-target run & debug (LaunchPad MSP-EXP430FR5994, onboard eZ-FET). #
@@ -95,4 +103,35 @@ energy:
 	          n, i/n*1e6, e*1e3, t }'
 	@echo "raw trace in energy.csv (time/current/voltage/energy)"
 
-.PHONY: clean flash run gdbserver gdb debug energy
+# ------------------------------------------------------------------ #
+# On-target micro-benchmark (cycle-exact). See doc/VALIDATION.md.     #
+#   make bench-target   program + run (computes, parks with results)  #
+#   make bench-read     attach, read bench_min[], print cycles + us   #
+# bench-read only READS memory (never resumes), so the tilib          #
+# reset-on-resume quirk does not disturb the parked results.          #
+# ------------------------------------------------------------------ #
+BENCH_METRICS = baseline yield sem_wake q_send q_recv mutex tick_0 tick_8
+BENCH_SRV_LOG = /tmp/mrtos-bench-srv.log
+
+bench-target: bench_fr5994.elf
+	$(MSPDEBUG) $(MSPDEBUG_DRV) "prog bench_fr5994.elf" "reset"
+
+bench-read: bench_fr5994.elf
+	@$(MSPDEBUG) $(MSPDEBUG_DRV) "gdb $(GDB_PORT)" >$(BENCH_SRV_LOG) 2>&1 & \
+	  srv=$$!; \
+	  while ! grep -q "Bound to port" $(BENCH_SRV_LOG) 2>/dev/null; do \
+	      sleep 0.3; kill -0 $$srv 2>/dev/null || { cat $(BENCH_SRV_LOG); exit 1; }; \
+	  done; \
+	  $(GDB) bench_fr5994.elf -batch -ex "target remote :$(GDB_PORT)" \
+	      -ex "print/d bench_done" -ex "print/d bench_min" 2>/dev/null \
+	      | sed -n 's/.*{\([0-9, ]*\)}.*/\1/p' | tr ',' ' ' \
+	      | awk -v metrics="$(BENCH_METRICS)" '{ \
+	          n = split(metrics, m, " "); base = $$1; \
+	          printf "%-10s %8s %8s %9s\n", "metric", "cycles", "net", "us"; \
+	          for (i = 1; i <= NF; i++) { \
+	              net = (i == 1) ? 0 : $$i - base; if (net < 0) net = 0; \
+	              printf "%-10s %8d %8d %9.3f\n", m[i], $$i, net, net/8.0; \
+	          } }'; \
+	  kill $$srv 2>/dev/null; wait $$srv 2>/dev/null || true
+
+.PHONY: clean flash run gdbserver gdb debug energy bench-target bench-read

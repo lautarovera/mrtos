@@ -77,8 +77,46 @@ states unmodeled). Reference values at `-Os`, msp430-gcc 9.3.1.11:
 | tick, no sleepers | ~45 |
 | tick, 8 sleepers | ~56 (O(1) delta list: not 8×) |
 
-On target the same markers become GPIO toggles: cycle-exact numbers
-via logic analyzer or Timer_A reads — planned with the HIL bench.
+On target the same `bench/bench.c` becomes **cycle-exact** (below).
+
+### On-target benchmark (cycle-exact)
+
+`bench/bench.c` built with `-DBENCH_TARGET` (`bench_fr5994.elf`) turns
+the markers into a free-running **TA1** read (SMCLK = 8 MHz, so 1 count
+= 1 CPU cycle = 125 ns) plus a **P1.2** GPIO toggle. The minimum delta
+per metric over 32 samples lands in `bench_min[]`, read out via the
+debugger. Procedure at the bench:
+
+```sh
+make bench-target     # program + run; bench computes and parks
+make bench-read       # attach, read bench_min[], print cycles + us
+```
+
+`bench-read` only *reads* memory (never resumes), so the tilib
+reset-on-resume quirk leaves the parked results intact.
+
+Two target-specific points: **min, not median** — on silicon the 1 kHz
+tick ISR occasionally lands inside an interval and inflates that
+sample; the minimum rejects it (the `mrtos_tick` metrics additionally
+run with interrupts masked, since calling the ISR body from task
+context would otherwise race the real tick). And **YIELD / SEM_WAKE
+bracket a real preemptive context switch** here (the cooperative sim
+cannot), so those numbers are the true hand-off cost.
+
+Cross-check: a logic analyzer on **P1.2** sees one high pulse per
+sample; its width should match the timer figure for that metric.
+
+Results — _fill at the bench_ (`-Os`, msp430-gcc 9.3.1.11, 8 MHz):
+
+| Metric | Cycles | µs | sim insns |
+|---|---|---|---|
+| one-way context switch (yield) | TBD | TBD | 52 |
+| sem_give → waiter running | TBD | TBD | 132 |
+| queue send (poll) | TBD | TBD | 78 |
+| queue recv (poll) | TBD | TBD | 79 |
+| mutex lock + unlock | TBD | TBD | 73 |
+| tick, no sleepers | TBD | TBD | 45 |
+| tick, 8 sleepers | TBD | TBD | 56 |
 
 ### Known coverage gap (by design)
 
