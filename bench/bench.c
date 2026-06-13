@@ -87,6 +87,34 @@ void __attribute__((noinline)) bench_mark_b(void) { __asm__ volatile("nop"); }
 #define BENCH_TICK_GUARD_EXIT   ((void)0)
 #endif
 
+#ifdef BENCH_TARGET
+/* Busy-wait n TA1 counts (1 count = 125 ns at SMCLK = 8 MHz). */
+static void bench_wait(uint16_t counts)
+{
+    uint16_t t = TA1R;
+    while ((uint16_t)(TA1R - t) < counts) { }
+}
+
+/* Index marker emitted on P1.2 before each metric's measurement burst:
+ * a long low gap, then `idx` short blips, then a short gap. On the logic
+ * analyzer the blips read as `idx` narrow spikes (1 = baseline, 2 =
+ * yield, ... 8 = tick_8), so each burst is self-identifying and the
+ * back-to-back metrics no longer smear together. Markers only - never
+ * touch bench_min. */
+static void bench_sep(uint8_t idx)
+{
+    P1OUT &= ~BIT2;
+    bench_wait(2000);                     /* ~250 us: clear gap from prev */
+    for (uint8_t i = 0; i < idx; i++) {
+        P1OUT |= BIT2;  bench_wait(40);   /* ~5 us blip */
+        P1OUT &= ~BIT2; bench_wait(40);   /* ~5 us gap  */
+    }
+    bench_wait(400);                      /* ~50 us before the burst */
+}
+#else
+#define bench_sep(idx) ((void)0)
+#endif
+
 static mrtos_tcb_t  t_ctl, t_peer, t_waiter, t_slp[N_SLEEPERS];
 static port_stack_t s_ctl[STK_WORDS], s_peer[STK_WORDS], s_wtr[STK_WORDS],
                     s_slp[N_SLEEPERS][STK_WORDS];
@@ -127,6 +155,7 @@ static void controller(void *arg)
     uint16_t v = 42;
 
     bench_id = BM_BASELINE;
+    bench_sep(BM_BASELINE + 1);        /* 1 blip */
     for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         bench_mark_b();
@@ -135,6 +164,7 @@ static void controller(void *arg)
     bench_id = BM_YIELD;
     mrtos_task_create(&t_peer, "peer", peer_task, NULL, 6,
                       s_peer, STK_WORDS);
+    bench_sep(BM_YIELD + 1);           /* 2 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_yield();                 /* peer runs mark_b, yields back */
@@ -145,6 +175,7 @@ static void controller(void *arg)
     mrtos_sem_init(&sem, 0, 1);
     mrtos_task_create(&t_waiter, "wtr", waiter_task, NULL, 7,
                       s_wtr, STK_WORDS);    /* preempts, blocks on sem */
+    bench_sep(BM_SEM_WAKE + 1);        /* 3 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_sem_give(&sem);          /* waiter preempts, marks b */
@@ -153,6 +184,7 @@ static void controller(void *arg)
 
     bench_id = BM_QSEND;
     mrtos_queue_init(&q, qstore, sizeof(uint16_t), 4);
+    bench_sep(BM_QSEND + 1);           /* 4 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_queue_send(&q, &v, 0);
@@ -161,6 +193,7 @@ static void controller(void *arg)
     }
     bench_id = BM_QRECV;
     mrtos_queue_send(&q, &v, 0);
+    bench_sep(BM_QRECV + 1);           /* 5 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         mrtos_queue_send(&q, &v, 0);
         bench_mark_a();
@@ -172,6 +205,7 @@ static void controller(void *arg)
     bench_id = BM_MUTEX;
     static mrtos_mutex_t mtx;
     mrtos_mutex_init(&mtx);
+    bench_sep(BM_MUTEX + 1);           /* 6 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         bench_mark_a();
         mrtos_mutex_lock(&mtx, 0);
@@ -181,6 +215,7 @@ static void controller(void *arg)
 
     /* Tick cost with an empty delay list... */
     bench_id = BM_TICK0;
+    bench_sep(BM_TICK0 + 1);           /* 7 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         BENCH_TICK_GUARD_ENTER;
         bench_mark_a();
@@ -196,6 +231,7 @@ static void controller(void *arg)
                           s_slp[i], STK_WORDS);
     mrtos_sleep(1);                    /* let them enter the delay list */
     bench_id = BM_TICK8;
+    bench_sep(BM_TICK8 + 1);           /* 8 blips */
     for (unsigned i = 0; i < SAMPLES; i++) {
         BENCH_TICK_GUARD_ENTER;
         bench_mark_a();
