@@ -96,7 +96,7 @@ existing semantics or tests change. The pieces:
 1. **The next deadline is already O(1)**: it is the delay list's head
    delta — the delta-list design pays off again. New kernel helper:
    `mrtos_next_deadline()` → head delta, or "none" if no task has a
-   timeout pending.
+   timeout pending. **(done — kernel half)**
 2. **Timer moves to ACLK** (32.768 kHz crystal on the LaunchPad, VLO
    fallback) so it survives LPM3. Natural tick becomes **1024 Hz**
    (`32768/32`), keeping `MRTOS_MS` integer-exact for powers of two;
@@ -110,7 +110,8 @@ existing semantics or tests change. The pieces:
    head delta, pop everything that reaches zero, adjust `tick_count`
    by `n`. This is the only new kernel logic (~25 lines) and is fully
    testable on host and simulator by construction — feed it counts,
-   assert wake order and `now()` coherence.
+   assert wake order and `now()` coherence. **(done — kernel half,
+   `test_unit_tickless`)**
 5. **No deadline at all** (every task blocked `MRTOS_FOREVER`): arm
    nothing, sleep in LPM3/LPM4 until a peripheral ISR. This is the
    pure event-driven case — *zero* spontaneous wakes, indistinguishable
@@ -133,7 +134,7 @@ not be lost — on MSP430 this is handled by entering LPM with a single
   keep hot-task stacks in SRAM. Document the latency trade.
 - Never allocate stacks or kernel objects in the LEA RAM window.
 
-### 2.3 Power locks (the LEA/driver veto, ~25 lines)
+### 2.3 Power locks (the LEA/driver veto, ~25 lines) **(done — kernel half)**
 
 A counter-based cap, the embedded-standard pattern:
 
@@ -178,10 +179,12 @@ kernel overlaps by construction.
 
 ## 4. Sequencing
 
-1. **2.1 tickless idle** — kernel half first (`mrtos_tick_advance`,
-   host+sim tested), port half second (ACLK timer, LPM3, on-target
-   checklist items for the sleep race and wake accounting).
-2. **2.3 power locks** — trivially small, lands with or right after.
+1. **2.1 tickless idle** — kernel half **done** (`mrtos_next_deadline`,
+   `mrtos_tick_advance`, host+sim tested in `test_unit_tickless`); port
+   half next (ACLK timer, LPM3 `port_idle`, on-target checklist items
+   for the sleep race and wake accounting).
+2. **2.3 power locks** — **done** (`mrtos_pm_lock/unlock/max_lpm`);
+   consumed by the port half's `port_idle`.
 3. **2.2** — documentation + soak-data stack table in the manual.
 4. **§3 benchmark** — at the bench, after T1–T8 pass on the current
    LPM0 build (the comparison needs a working baseline anyway).

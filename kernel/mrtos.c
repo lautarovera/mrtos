@@ -182,6 +182,21 @@ static void wake_preempt_check(mrtos_tcb_t *woken)
 /* ------------------------------------------------------------------ */
 /* Tick                                                                 */
 /* ------------------------------------------------------------------ */
+
+/* Pop the delay-list head (its time has come) and make it ready.       */
+/* Shared by mrtos_tick() and mrtos_tick_advance().                     */
+static void wake_delay_head(void)
+{
+    mrtos_tcb_t *t = delay_head;
+    delay_head = t->dnext;
+    t->in_delay = 0;
+    t->dnext = NULL;
+    if (t->wait_head != NULL)
+        wait_remove(t);                   /* timed out on an object   */
+    t->state = MRTOS_TASK_READY;          /* wake_res keeps TIMEOUT   */
+    ready_insert(t);
+}
+
 __attribute__((used)) void mrtos_tick(void)
 {
     tick_count++;
@@ -200,16 +215,8 @@ __attribute__((used)) void mrtos_tick(void)
     if (delay_head != NULL) {
         if (delay_head->delta > 0)
             delay_head->delta--;
-        while (delay_head != NULL && delay_head->delta == 0) {
-            mrtos_tcb_t *t = delay_head;
-            delay_head = t->dnext;
-            t->in_delay = 0;
-            t->dnext = NULL;
-            if (t->wait_head != NULL)
-                wait_remove(t);               /* timed out on an object   */
-            t->state = MRTOS_TASK_READY;      /* wake_res keeps TIMEOUT   */
-            ready_insert(t);
-        }
+        while (delay_head != NULL && delay_head->delta == 0)
+            wake_delay_head();
     }
 
     /* Round-robin among equal priorities. */
@@ -219,6 +226,75 @@ __attribute__((used)) void mrtos_tick(void)
     }
 
     mrtos_sched_pick();
+}
+
+/* ------------------------------------------------------------------ */
+/* Tickless support (consumed by a tickless port's port_idle).          */
+/* ------------------------------------------------------------------ */
+
+/* Ticks until the earliest pending wake, or 0 if no task has a timeout */
+/* pending (the delay list is empty). The head delta is >= 1 between    */
+/* ticks, so 0 is unambiguous.                                          */
+uint16_t mrtos_next_deadline(void)
+{
+    uint16_t key = port_irq_save();
+    uint16_t d = (delay_head != NULL) ? delay_head->delta : 0u;
+    port_irq_restore(key);
+    return d;
+}
+
+/* Fold n elapsed ticks into the time base in one step: advance the    */
+/* clock, wake everything whose deadline has passed, and reschedule.    */
+/* Equivalent to n calls of the delay-list half of mrtos_tick(), but    */
+/* O(woken) not O(n). Call with interrupts disabled, like mrtos_tick(). */
+/* Does no round-robin or stack check: only idle ran during the sleep.  */
+void mrtos_tick_advance(uint16_t n)
+{
+    tick_count += n;
+    while (delay_head != NULL && delay_head->delta <= n) {
+        n = (uint16_t)(n - delay_head->delta);
+        wake_delay_head();
+    }
+    if (delay_head != NULL)
+        delay_head->delta = (uint16_t)(delay_head->delta - n);
+    mrtos_sched_pick();
+}
+
+/* ------------------------------------------------------------------ */
+/* Power-mode locks: a driver caps how deep idle may sleep while it     */
+/* needs clocks (e.g. LEA needs LPM0). port_idle() sleeps at the        */
+/* deepest mode no one has vetoed (mrtos_pm_max_lpm()).                 */
+/* ------------------------------------------------------------------ */
+static uint8_t pm_count[MRTOS_LPM_LEVELS];
+
+void mrtos_pm_lock(uint8_t max_lpm)
+{
+    uint16_t key = port_irq_save();
+    if (max_lpm < MRTOS_LPM_LEVELS)
+        pm_count[max_lpm]++;
+    port_irq_restore(key);
+}
+
+void mrtos_pm_unlock(uint8_t max_lpm)
+{
+    uint16_t key = port_irq_save();
+    if (max_lpm < MRTOS_LPM_LEVELS && pm_count[max_lpm] > 0)
+        pm_count[max_lpm]--;
+    port_irq_restore(key);
+}
+
+uint8_t mrtos_pm_max_lpm(void)
+{
+    uint16_t key = port_irq_save();
+    uint8_t lvl = MRTOS_CFG_LPM_DEFAULT;
+    for (uint8_t i = 0; i < MRTOS_CFG_LPM_DEFAULT; i++) {
+        if (pm_count[i] > 0) {            /* most restrictive cap wins */
+            lvl = i;
+            break;
+        }
+    }
+    port_irq_restore(key);
+    return lvl;
 }
 
 uint32_t mrtos_now(void)

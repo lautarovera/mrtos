@@ -42,6 +42,20 @@ extern "C" {
  * that substitute their own stack memory repaint with this value. */
 #define MRTOS_STACK_PAINT   0xC35Au
 
+/* Low-power-mode levels for the power-lock API (mrtos_pm_lock). The
+ * kernel only tracks the integer level; the port maps it to hardware
+ * (on MSP430: LPM0..LPM4). Higher = deeper sleep. A tickless port idles
+ * at the deepest level no driver has vetoed. */
+#define MRTOS_LPM0  0u
+#define MRTOS_LPM1  1u
+#define MRTOS_LPM2  2u
+#define MRTOS_LPM3  3u
+#define MRTOS_LPM4  4u
+#define MRTOS_LPM_LEVELS  5u
+#ifndef MRTOS_CFG_LPM_DEFAULT
+#define MRTOS_CFG_LPM_DEFAULT  MRTOS_LPM3  /* deepest idle when unvetoed */
+#endif
+
 #define MRTOS_PRIO_LEVELS   8u             /* 0 = idle (lowest) .. 7     */
 #define MRTOS_PRIO_MAX      (MRTOS_PRIO_LEVELS - 1u)
 
@@ -158,10 +172,25 @@ void mrtos_stack_overflow_hook(mrtos_tcb_t *t);
 size_t mrtos_stack_unused(const mrtos_tcb_t *t);
 
 /* ------------------------------------------------------------------ */
+/* Power-mode locks. A driver caps idle's sleep depth while it needs    */
+/* clocks running (e.g. LEA: mrtos_pm_lock(MRTOS_LPM0)). Balanced       */
+/* lock/unlock; counter-based, so nesting and multiple holders compose. */
+/* ISR-safe.                                                            */
+/* ------------------------------------------------------------------ */
+void    mrtos_pm_lock(uint8_t max_lpm);
+void    mrtos_pm_unlock(uint8_t max_lpm);
+uint8_t mrtos_pm_max_lpm(void);            /* deepest level allowed now   */
+
+/* ------------------------------------------------------------------ */
 /* Kernel entry points used by the PORT (not by application code)       */
 /* ------------------------------------------------------------------ */
 void mrtos_tick(void);                     /* tick ISR body               */
 void mrtos_sched_pick(void);               /* select highest-prio ready   */
+/* Tickless support: a tickless port_idle() reads mrtos_next_deadline()  */
+/* to size an LPM sleep, then mrtos_tick_advance(elapsed) on wake. Both  */
+/* called with interrupts disabled, like mrtos_tick().                   */
+uint16_t mrtos_next_deadline(void);        /* ticks to earliest wake, 0=none */
+void     mrtos_tick_advance(uint16_t n);   /* fold n elapsed ticks at once   */
 
 /* ------------------------------------------------------------------ */
 /* PORT CONTRACT - every port must provide (in port.h / port.c):        */
