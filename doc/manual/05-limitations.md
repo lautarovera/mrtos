@@ -95,22 +95,27 @@ These are silicon facts the port obeys; they bind applications too:
   cycle-exact sampling should use timer-capture hardware, not ISR
   timestamps.
 - **8 priority levels / 16-bit timeouts / 32-bit tick counter:**
-  consequences spelled out in §2.1 and §2.8.
+  consequences spelled out in §2.1 and §2.9.
 
-## 5.6 No tickless idle (yet)
+## 5.6 No tickless idle (yet — kernel half landed)
 
-**What:** the tick fires 1000×/s even when every task sleeps; LPM0
-only.
+**What:** the shipped `port_idle()` still idles in LPM0 with the tick
+firing 1000×/s. The *kernel* support for tickless is in place
+(`mrtos_next_deadline`, `mrtos_tick_advance`, power locks — §2.7/§2.8,
+tested in `test_unit_tickless`); a tickless `port_idle()` is not yet
+written.
 
-**Why:** correct tickless requires computing the next deadline from
-the delay list, reprogramming the timer, and reconciling elapsed time
-on wake — straightforward but new surface. The current design already
-supports it structurally: the delta list's head *is* the next
-deadline, and the idle-resume path needs no special casing (§4.5).
+**Why the rest is deferred:** the remaining work is the port half —
+reprogram the wake timer on ACLK, enter LPM3, reconcile elapsed time
+on wake, and prove the LPM-entry interrupt race on silicon. Tracked in
+`doc/POWER.md` §2.1. The structure was always ready: the delta list's
+head *is* the next deadline, and the idle-resume path needs no special
+casing (§4.5).
 
-**Cost:** idle floor is LPM0 + 1 kHz wakeups (microamps to low
-milliamps depending on rails). For battery products, implementing
-Timer_A-on-ACLK + LPM3 tickless is the single highest-value extension.
+**Cost today:** idle floor is LPM0 + 1 kHz wakeups — measured at
+**277 µA** on the FR5994 LaunchPad (T8). For battery products,
+Timer_A-on-ACLK + LPM3 tickless is the single highest-value extension,
+targeting single-digit µA.
 
 ## 5.7 Cooperative test ports — verification gap
 

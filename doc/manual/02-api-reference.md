@@ -192,12 +192,40 @@ must not block and should treat the system as compromised (the
 overflow already smashed memory below the stack): log minimal state
 and reset.
 
-## 2.7 Port-facing entry points
+## 2.7 Power-mode locks
+
+```c
+void    mrtos_pm_lock(uint8_t max_lpm);
+void    mrtos_pm_unlock(uint8_t max_lpm);
+uint8_t mrtos_pm_max_lpm(void);
+```
+A driver that needs clocks running while it works (e.g. LEA needs
+SMCLK) caps how deep idle may sleep: `mrtos_pm_lock(MRTOS_LPM0)` while
+busy, `mrtos_pm_unlock(MRTOS_LPM0)` after. Counter-based, so nesting
+and multiple independent holders compose; the cap is the most
+restrictive (shallowest) level any holder requested. `mrtos_pm_max_lpm()`
+returns it — the tickless `port_idle()` sleeps no deeper than that, or
+at `MRTOS_CFG_LPM_DEFAULT` (LPM3) when nothing is held. Levels are
+`MRTOS_LPM0`..`MRTOS_LPM4` (higher = deeper); the port maps them to
+hardware. All three are ISR-safe; unbalanced and out-of-range calls are
+ignored.
+
+## 2.8 Port-facing entry points
 
 `mrtos_tick()` and `mrtos_sched_pick()` are exported for ports only
 (chapter 3). Application code never calls them.
 
-## 2.8 Timeout semantics — exact rules
+A **tickless** port additionally uses two entry points to suppress the
+periodic tick while idle: `mrtos_next_deadline()` returns the ticks
+until the earliest pending wake (0 if no task has a timeout), so
+`port_idle()` can program a wake timer that far ahead and sleep;
+`mrtos_tick_advance(n)` folds the `n` ticks slept through back into the
+time base in one O(woken) step (waking everything due, adjusting
+`tick_count`). Both are called with interrupts disabled, like
+`mrtos_tick()`. Active-phase behaviour is unchanged — these run only
+while the idle task would otherwise spin on the tick.
+
+## 2.9 Timeout semantics — exact rules
 
 All timeouts are `uint16_t` ticks:
 
