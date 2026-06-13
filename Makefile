@@ -68,17 +68,24 @@ MSPDEBUG     ?= LD_LIBRARY_PATH=$(TI_DLL_DIR):$(MSPDEBUG_DIR)/lib $(MSPDEBUG_DIR
 GDB          ?= MSP430_GCC_DIR=$(GCC_DIR) tools/msp430-gdb.sh
 GDB_PORT     ?= 2000
 
+# Attach the LaunchPad's eZ-FET to WSL2 (one command, no Windows
+# terminal, no admin for the recurring case). No-op on native Linux or
+# when already attached, so it is safe as a prerequisite. See
+# tools/attach_board.sh and doc/DEBUG.md.
+attach:
+	@tools/attach_board.sh
+
 # Program the board and leave it halted under the debugger's control.
-flash: mrtos_fr5994.elf
+flash: attach mrtos_fr5994.elf
 	$(MSPDEBUG) $(MSPDEBUG_DRV) "prog mrtos_fr5994.elf"
 
 # Program, reset and let it run free (mspdebug releases on exit).
-run: mrtos_fr5994.elf
+run: attach mrtos_fr5994.elf
 	$(MSPDEBUG) $(MSPDEBUG_DRV) "prog mrtos_fr5994.elf" "reset"
 
 # GDB server on :$(GDB_PORT). Programs first, then serves until ^C
 # (gdb_loop keeps it alive across client reconnects).
-gdbserver: mrtos_fr5994.elf
+gdbserver: attach mrtos_fr5994.elf
 	$(MSPDEBUG) $(MSPDEBUG_DRV) "prog mrtos_fr5994.elf" \
 	    "opt gdb_loop true" "gdb $(GDB_PORT)"
 
@@ -97,7 +104,7 @@ debug:
 # total by construction. NOTE: starting a capture restarts the target.
 ENERGYTRACE ?= LD_LIBRARY_PATH=$(TI_DLL_DIR) $(HOME)/toolchains/energytrace/energytrace
 DUR ?= 10
-energy:
+energy: attach
 	$(ENERGYTRACE) $(DUR) | tee energy.csv | awk '!/^#/ { n++; i += $$2; e = $$4; t = $$1 } \
 	    END { printf "samples=%d  avg_current=%.1f uA  energy=%.3f mJ  over %.2f s\n", \
 	          n, i/n*1e6, e*1e3, t }'
@@ -113,10 +120,10 @@ energy:
 BENCH_METRICS = baseline yield sem_wake q_send q_recv mutex tick_0 tick_8
 BENCH_SRV_LOG = /tmp/mrtos-bench-srv.log
 
-bench-target: bench_fr5994.elf
+bench-target: attach bench_fr5994.elf
 	$(MSPDEBUG) $(MSPDEBUG_DRV) "prog bench_fr5994.elf" "reset"
 
-bench-read: bench_fr5994.elf
+bench-read: attach bench_fr5994.elf
 	@$(MSPDEBUG) $(MSPDEBUG_DRV) "gdb $(GDB_PORT)" >$(BENCH_SRV_LOG) 2>&1 & \
 	  srv=$$!; \
 	  while ! grep -q "Bound to port" $(BENCH_SRV_LOG) 2>/dev/null; do \
@@ -134,4 +141,4 @@ bench-read: bench_fr5994.elf
 	          } }'; \
 	  kill $$srv 2>/dev/null; wait $$srv 2>/dev/null || true
 
-.PHONY: clean flash run gdbserver gdb debug energy bench-target bench-read
+.PHONY: clean attach flash run gdbserver gdb debug energy bench-target bench-read

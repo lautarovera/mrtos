@@ -54,21 +54,35 @@ device is attached), a physical replug rebinds them.
 
 ### WSL2: pass the USB device through first
 
-WSL2 has no native USB. In an **elevated (admin) PowerShell on
-Windows**, with the LaunchPad plugged in:
+WSL2 has no native USB; usbipd-win bridges it. **One-time, on Windows**
+(admin PowerShell), install the bridge:
 
 ```powershell
 winget install usbipd             # once; reopen the terminal after
-usbipd list                       # find "MSP Debug Interface" (VID:PID 2047:0013)
-usbipd bind   --busid <X-Y>       # once per device (admin required)
-usbipd attach --wsl --busid <X-Y> # after every replug / Windows reboot
 ```
 
-Then verify inside WSL with `tools/check_board.sh` — it walks the
-whole chain (device visible → permissions → tools → probe handshake)
-and prints the exact fix for the first broken link. Tip:
-`usbipd attach --wsl --busid <X-Y> --auto-attach` keeps re-attaching
-across replugs so you do not repeat the last step every time.
+Everything after that is **automated from WSL** — no Windows terminal:
+
+```sh
+make attach        # or: tools/attach_board.sh
+```
+
+`tools/attach_board.sh` finds the eZ-FET in `usbipd list`, attaches it
+to WSL, and waits for `/dev/ttyACM0`. The recurring attach needs **no
+admin**, so it runs through WSL interop; the very first time a device
+is shared it triggers a single one-click UAC prompt for the persistent
+`bind`. It is idempotent (a no-op when already attached) and a no-op on
+native Linux — which is why the make hardware targets (`run`, `flash`,
+`gdbserver`, `bench-target`, `energy`, …) depend on it: just
+`make run` and the board is attached for you.
+
+Verify the whole chain any time with `tools/check_board.sh` (device
+visible → permissions → tools → probe handshake); it prints the exact
+fix for the first broken link.
+
+Under the hood, the recurring step is `usbipd attach --wsl --busid
+<X-Y>` (the busid is shown by `usbipd list`); `bind --busid <X-Y>` is
+the one-time admin step the script elevates for you.
 
 ## 2. CLI workflow (make targets)
 

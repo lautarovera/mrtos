@@ -35,11 +35,11 @@ if [ -n "$found" ]; then
     ok "TI debug probe ($found_id, $(cat "$found/product" 2>/dev/null)) at $found"
 else
     bad "no TI probe on the WSL USB bus" \
-        "attach it from Windows (admin PowerShell):
-          winget install usbipd            # once
-          usbipd list                      # find the 'MSP Debug Interface' busid (2047:0013)
-          usbipd bind --busid <X-Y>        # once per device
-          usbipd attach --wsl --busid <X-Y> --auto-attach"
+        "attach it (one command, from WSL - no Windows terminal):
+          make attach        # or: tools/attach_board.sh
+        First-time only, if the device was never shared, a one-click UAC
+        prompt appears for the (persistent) bind. Needs usbipd-win on
+        Windows: 'winget install usbipd' in an admin PowerShell once."
 fi
 
 echo "== 2. permissions =="
